@@ -1,7 +1,7 @@
 import express from "express";
 import protect from "../middleware/authMiddleware.js";
 import Session from "../models/Session.js";
-
+import { QUESTIONS } from "../utils/seedProblems.js";
 import codeExecutionService from "../services/codeExecutionService.js";
 
 const router = express.Router();
@@ -9,8 +9,7 @@ const router = express.Router();
 router.get("/:id", protect, async (req, res) => {
   try {
     const session = await Session.findById(req.params.id)
-      .populate("users", "name email")
-      .populate("problem");
+      .populate("users", "name email");
 
     if (!session) {
       return res.status(404).json({ message: "Session not found" });
@@ -25,12 +24,24 @@ router.get("/:id", protect, async (req, res) => {
       return res.status(403).json({ message: "You are not authorized to access this session room." });
     }
 
-    return res.status(200).json({ session });
+    // Fetch the static problem data
+    const problemData = QUESTIONS[session.problem];
+
+    if (!problemData) {
+      return res.status(404).json({ message: "Invalid or missing problem associated with this session." });
+    }
+
+    // Convert Mongoose document to plain object to attach problem details
+    const sessionData = session.toObject();
+    sessionData.problem = problemData;
+
+    return res.status(200).json({ session: sessionData });
   } catch (error) {
     console.error("Error fetching session:", error);
     return res.status(500).json({ message: "Server error retrieving session details" });
   }
 });
+
 router.post("/:id/run", protect, async (req, res) => {
   const { code, language } = req.body;
   if (!code || !language) {
@@ -38,7 +49,7 @@ router.post("/:id/run", protect, async (req, res) => {
   }
 
   try {
-    const session = await Session.findById(req.params.id).populate("problem");
+    const session = await Session.findById(req.params.id);
     if (!session) {
       return res.status(404).json({ message: "Session not found" });
     }
@@ -51,7 +62,7 @@ router.post("/:id/run", protect, async (req, res) => {
       return res.status(403).json({ message: "You are not authorized to run code in this session room." });
     }
 
-    const problem = session.problem;
+    const problem = QUESTIONS[session.problem];
     if (!problem) {
       return res.status(404).json({ message: "No problem found associated with this session." });
     }
@@ -71,7 +82,7 @@ router.post("/:id/submit", protect, async (req, res) => {
   }
 
   try {
-    const session = await Session.findById(req.params.id).populate("problem");
+    const session = await Session.findById(req.params.id);
     if (!session) {
       return res.status(404).json({ message: "Session not found" });
     }
@@ -84,7 +95,7 @@ router.post("/:id/submit", protect, async (req, res) => {
       return res.status(403).json({ message: "You are not authorized to submit code in this session room." });
     }
 
-    const problem = session.problem;
+    const problem = QUESTIONS[session.problem];
     if (!problem) {
       return res.status(404).json({ message: "No problem found associated with this session." });
     }

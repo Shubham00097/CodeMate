@@ -50,7 +50,7 @@ function parseInputToArgs(inputStr) {
 
 const codeExecutionService = {
   execute: async (code, language, problem) => {
-    const judge0Url = process.env.JUDGE0_API_URL || "https://judge0-ce.p.rapidapi.com";
+    const judge0Url = process.env.JUDGE0_API_URL || "https://ce.judge0.com";
     const firstTestCase = problem.testCases[0];
     const problemTitle = problem.title.toLowerCase();
     
@@ -69,7 +69,11 @@ const codeExecutionService = {
     else if (problemKey === "longest") functionName = "lengthOfLongestSubstring";
 
     // Parse input arguments for JS/Python
-    const args = parseInputToArgs(firstTestCase.input);
+    // In the new static questions format, input is already an array of arguments.
+    let args = firstTestCase.input;
+    if (typeof args === "string") {
+      args = parseInputToArgs(args);
+    }
 
     let wrapperCode = "";
     let languageId = 63; // Node.js
@@ -231,7 +235,15 @@ int main() {
       const data = res.data;
       const { status, stdout, stderr, compile_output, time } = data;
 
-      const expected = firstTestCase.expectedOutput.trim();
+      // Extract expected output properly based on the new schema
+      let expectedStr = "";
+      if (firstTestCase.expected !== undefined) {
+         expectedStr = typeof firstTestCase.expected === "string" ? firstTestCase.expected : JSON.stringify(firstTestCase.expected);
+      } else if (firstTestCase.expectedOutput !== undefined) {
+         expectedStr = String(firstTestCase.expectedOutput);
+      }
+
+      const expected = expectedStr.trim();
       const actual = stdout ? stdout.trim() : "";
 
       let statusDescription = status.description;

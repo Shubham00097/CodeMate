@@ -1,13 +1,73 @@
 import Session from "../models/Session.js";
-import Problem from "../models/Problem.js";
+import { QUESTIONS } from "../utils/seedProblems.js";
 
-// In-memory queue: Array of { socketId, userId, criteria: { difficulty, topic } }
-const queue = [];
+// In-memory queue: Array of { socketId, userId, criteria, timerId }
+let queue = [];
+
+const createMatch = async (io, entry1, entry2) => {
+  try {
+    const isExactMatch =
+      entry1.criteria.difficulty === entry2.criteria.difficulty &&
+      entry1.criteria.topic === entry2.criteria.topic;
+
+    let matchedProblem = null;
+    const allQuestions = Object.values(QUESTIONS);
+
+    if (allQuestions.length === 0) {
+      throw new Error("Missing problems: seedProblems.js contains no questions.");
+    }
+
+    if (isExactMatch) {
+      // 1. Try exact match (case-insensitive)
+      matchedProblem = allQuestions.find(
+        (q) =>
+          q.difficulty.toLowerCase() === entry1.criteria.difficulty.toLowerCase() &&
+          q.topic.toLowerCase() === entry1.criteria.topic.toLowerCase()
+      );
+    }
+
+    if (!matchedProblem) {
+      // 2. Try matching difficulty only
+      const diffQuestions = allQuestions.filter(
+        (q) => q.difficulty.toLowerCase() === entry1.criteria.difficulty.toLowerCase()
+      );
+      if (diffQuestions.length > 0) {
+        matchedProblem = diffQuestions[Math.floor(Math.random() * diffQuestions.length)];
+      }
+    }
+
+    if (!matchedProblem) {
+      // 3. Random problem fallback
+      matchedProblem = allQuestions[Math.floor(Math.random() * allQuestions.length)];
+    }
+
+    // Create a new Session in MongoDB using the integer id of the static question
+    const session = new Session({
+      users: [entry1.userId, entry2.userId],
+      difficulty: matchedProblem.difficulty || entry1.criteria.difficulty,
+      topic: matchedProblem.topic || entry1.criteria.topic,
+      problem: matchedProblem.id,
+      status: "active",
+    });
+
+    await session.save();
+
+    console.log(`Match found! Session ${session._id} created with problem "${matchedProblem.title}"`);
+
+    // Notify both users
+    io.to(entry1.socketId).emit("match_found", { sessionId: session._id, problemId: matchedProblem.id });
+    io.to(entry2.socketId).emit("match_found", { sessionId: session._id, problemId: matchedProblem.id });
+  } catch (err) {
+    console.error("Error creating match session:", err);
+    io.to(entry1.socketId).emit("match_error", { message: err.message || "Failed to create match session" });
+    io.to(entry2.socketId).emit("match_error", { message: err.message || "Failed to create match session" });
+  }
+};
 
 const matchingService = {
   handleFindMatch: async (io, socket, criteria) => {
-    // 1. Check if user is already in queue and remove old entry to prevent duplicates
-    matchingService.removeFromQueue(socket.id);
+    // 1. Check if user is already in queue (by socket OR user id) and remove old entry to prevent duplicates
+    matchingService.removeFromQueue(socket.id, socket.userId);
 
     const { difficulty, topic } = criteria;
 
@@ -16,71 +76,67 @@ const matchingService = {
       (entry) =>
         entry.criteria.difficulty === difficulty &&
         entry.criteria.topic === topic &&
-        entry.userId !== socket.userId // ensure not matching self
+        entry.userId !== socket.userId
     );
 
     if (partnerIndex !== -1) {
-      // 3. Match found!
+      // 3. Match found immediately!
       const partner = queue[partnerIndex];
+      if (partner.timerId) clearTimeout(partner.timerId);
+
       // Remove partner from queue
       queue.splice(partnerIndex, 1);
 
-      try {
-        // Find matching problem
-        let problem = await Problem.findOne({ 
-          difficulty: difficulty.toLowerCase(), 
-          topic: topic.toLowerCase() 
-        });
-
-        // Fallback: search case insensitive or select any problem if none matches
-        if (!problem) {
-          problem = await Problem.findOne({ difficulty: difficulty.toLowerCase() });
-        }
-        if (!problem) {
-          problem = await Problem.findOne({});
-        }
-        if (!problem) {
-          throw new Error("No algorithm problems exist in the database to bind to the session.");
-        }
-
-        // Create a new Session in MongoDB
-        const session = new Session({
-          users: [socket.userId, partner.userId],
-          difficulty,
-          topic,
-          problem: problem._id,
-          status: "active",
-        });
-        await session.save();
-
-        console.log(`Match found! Session ${session._id} created with problem "${problem.title}" for ${socket.userId} and ${partner.userId}`);
-
-        // Notify both users
-        io.to(socket.id).emit("match_found", { sessionId: session._id, problemId: problem._id });
-        io.to(partner.socketId).emit("match_found", { sessionId: session._id, problemId: problem._id });
-      } catch (err) {
-        console.error("Error creating match session:", err);
-        // On error, let them try again later or emit error
-        socket.emit("match_error", { message: "Failed to create match session" });
-        io.to(partner.socketId).emit("match_error", { message: "Failed to create match session" });
-      }
+      const userEntry = { socketId: socket.id, userId: socket.userId, criteria };
+      await createMatch(io, userEntry, partner);
     } else {
-      // 4. No match found immediately, add to queue
+      // 4. No exact match found immediately, add to queue
       console.log(`Adding ${socket.userId} to queue for ${difficulty} - ${topic}`);
-      queue.push({
+
+      const newEntry = {
         socketId: socket.id,
         userId: socket.userId,
         criteria,
-      });
+        timerId: null,
+      };
+
+      // 5. Timeout for random match (25 seconds)
+      newEntry.timerId = setTimeout(() => {
+        // Check if this user is still in the queue
+        const myIndex = queue.findIndex((e) => e.userId === socket.userId);
+        if (myIndex === -1) return;
+
+        // Find ANY other user in the queue
+        const otherIndex = queue.findIndex((e) => e.userId !== socket.userId);
+        if (otherIndex !== -1) {
+          const me = queue[myIndex];
+          const other = queue[otherIndex];
+
+          console.log(`Timeout reached for ${me.userId}. Matching randomly with ${other.userId}`);
+
+          if (other.timerId) clearTimeout(other.timerId);
+
+          // Remove both from queue
+          queue = queue.filter((e) => e.userId !== me.userId && e.userId !== other.userId);
+
+          createMatch(io, me, other);
+        }
+        // If no one else is in queue, they just keep waiting
+      }, 25000);
+
+      queue.push(newEntry);
     }
   },
 
-  removeFromQueue: (socketId) => {
-    const index = queue.findIndex((entry) => entry.socketId === socketId);
-    if (index !== -1) {
-      console.log(`Removing ${queue[index].userId} from matching queue`);
-      queue.splice(index, 1);
-    }
+  removeFromQueue: (socketId, userId = null) => {
+    queue = queue.filter((entry) => {
+      const isMatch = entry.socketId === socketId || (userId && entry.userId === userId);
+      if (isMatch) {
+        if (entry.timerId) clearTimeout(entry.timerId);
+        console.log(`Removing ${entry.userId} from matching queue`);
+      }
+      return !isMatch;
+    });
   },
 };
 

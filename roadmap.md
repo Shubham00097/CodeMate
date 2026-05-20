@@ -59,10 +59,10 @@ This roadmap outlines the systematic development of the **codeMate** (Real-time 
 
 **Goal:** Enable face-to-face communication during the peer programming session.
 
-*   [ ] **WebRTC Signaling Server:** Extend the existing Socket.io server to handle WebRTC offers, answers, and ICE candidates.
-*   [ ] **Video UI Component:** Add local and remote video elements to the Coding Session UI.
-*   [ ] **Media Stream Management:** Request microphone and camera permissions via browser APIs.
-*   [ ] **P2P Connection:** Establish the WebRTC peer-to-peer connection for low-latency communication.
+*   [x] **WebRTC Signaling Server:** Extend the existing Socket.io server to handle WebRTC offers, answers, and ICE candidates.
+*   [x] **Video UI Component:** Add local and remote video elements to the Coding Session UI.
+*   [x] **Media Stream Management:** Request microphone and camera permissions via browser APIs.
+*   [x] **P2P Connection:** Establish the WebRTC peer-to-peer connection for low-latency communication.
 
 ---
 

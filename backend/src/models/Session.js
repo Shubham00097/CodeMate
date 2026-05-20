@@ -23,8 +23,7 @@ const sessionSchema = new mongoose.Schema(
       required: true,
     },
     problem: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Problem",
+      type: Number,
       required: true,
     },
   },

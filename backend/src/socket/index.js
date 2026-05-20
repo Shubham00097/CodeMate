@@ -56,6 +56,19 @@ export default function setupSocket(server) {
       });
     });
 
+    socket.on("call_signal", ({ sessionId, type, payload }) => {
+      socket.to(sessionId).emit("call_signal", {
+        userId: socket.userId,
+        type,
+        payload
+      });
+    });
+
+    // Relay mic/camera mute state to the partner (used by PeerJS flow)
+    socket.on("media_status", ({ sessionId, mediaType, enabled }) => {
+      socket.to(sessionId).emit("media_status", { mediaType, enabled });
+    });
+
     socket.on("leave_session", (sessionId) => {
       socket.leave(sessionId);
       console.log(`User ${socket.userId} left session room: ${sessionId}`);
