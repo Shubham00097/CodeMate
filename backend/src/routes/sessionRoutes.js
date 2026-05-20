@@ -3,6 +3,7 @@ import protect from "../middleware/authMiddleware.js";
 import Session from "../models/Session.js";
 import { QUESTIONS } from "../utils/seedProblems.js";
 import codeExecutionService from "../services/codeExecutionService.js";
+import aiService from "../services/aiService.js";
 
 const router = express.Router();
 
@@ -105,6 +106,39 @@ router.post("/:id/submit", protect, async (req, res) => {
   } catch (error) {
     console.error("Error submitting code:", error);
     return res.status(500).json({ message: "Server error submitting code" });
+  }
+});
+
+router.post("/:id/hint", protect, async (req, res) => {
+  const { code, language } = req.body;
+  if (code === undefined || !language) {
+    return res.status(400).json({ message: "Code and language are required" });
+  }
+
+  try {
+    const session = await Session.findById(req.params.id);
+    if (!session) {
+      return res.status(404).json({ message: "Session not found" });
+    }
+
+    // Security: Check if user belongs to session
+    const isMember = session.users.some(
+      (userId) => userId.toString() === req.user._id.toString()
+    );
+    if (!isMember) {
+      return res.status(403).json({ message: "You are not authorized to request AI hints in this session room." });
+    }
+
+    const problem = QUESTIONS[session.problem];
+    if (!problem) {
+      return res.status(404).json({ message: "No problem found associated with this session." });
+    }
+
+    const hint = await aiService.generateHint(problem, code, language);
+    return res.status(200).json({ hint });
+  } catch (error) {
+    console.error("Error generating AI hint:", error);
+    return res.status(500).json({ message: error.message || "Server error generating AI hint" });
   }
 });
 

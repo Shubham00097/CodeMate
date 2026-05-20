@@ -19,6 +19,8 @@ export default function VideoCallPanel({ sessionId, user, peerUser, socketRef, o
   const [isConnected, setIsConnected] = useState(false);
   const [hasLocal, setHasLocal]     = useState(false);
   const [hasRemote, setHasRemote]   = useState(false);
+  const [mediaError, setMediaError] = useState(null);
+  const [retryTrigger, setRetryTrigger] = useState(0);
 
   // ── Stable refs — never cause re-renders ──────────────────────────────────
   const localVideoRef   = useRef(null);
@@ -129,6 +131,7 @@ export default function VideoCallPanel({ sessionId, user, peerUser, socketRef, o
           setTimeout(setup, 2000);
         } else {
           console.error("Media access error:", err.name, err.message);
+          setMediaError(err.name === "NotAllowedError" ? "Permission Denied" : err.message || "Failed to access camera/mic");
         }
       }
     };
@@ -150,9 +153,10 @@ export default function VideoCallPanel({ sessionId, user, peerUser, socketRef, o
       setHasLocal(false);
       setHasRemote(false);
       setIsConnected(false);
+      setMediaError(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId]); // intentionally stable — all other values read via refs
+  }, [sessionId, retryTrigger]); // re-run when sessionId or manual retry trigger changes
 
   // ── Socket: relay media status & react to peer leaving ────────────────────
   useEffect(() => {
@@ -384,9 +388,31 @@ export default function VideoCallPanel({ sessionId, user, peerUser, socketRef, o
             style={S.localVideo(hasLocal && camOn)}
           />
           <div style={S.placeholder(!hasLocal || !camOn)}>
-            {!hasLocal ? (
+            {mediaError ? (
               <>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="1.5">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2" style={{ marginBottom: "4px" }}>
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                  <line x1="12" y1="9" x2="12" y2="13"/>
+                  <line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+                <span style={{ fontSize: "11px", color: "#F87171", textAlign: "center", padding: "0 10px", lineHeight: "1.4" }}>
+                  Camera/mic access blocked.<br />Enable permissions and retry.
+                </span>
+                <button onClick={() => setRetryTrigger(prev => prev + 1)}
+                  style={{
+                    marginTop: "8px", background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)",
+                    borderRadius: "4px", color: "#fff", fontSize: "10px", padding: "4px 10px", cursor: "pointer",
+                    transition: "background 0.2s"
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.15)"}
+                  onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.08)"}
+                >
+                  Retry Access
+                </button>
+              </>
+            ) : !hasLocal ? (
+              <>
+                <svg style={{ animation: "cm-spin 1s linear infinite" }} width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="1.5">
                   <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
                 </svg>
                 <span style={{fontSize:"11px"}}>Accessing camera…</span>

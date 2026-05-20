@@ -8,6 +8,7 @@ import Editor from "@monaco-editor/react";
 import { clearAuthData, getToken } from "@/lib/auth";
 import { authApi, sessionApi } from "@/lib/api";
 import VideoCallPanel from "@/components/VideoCallPanel";
+import * as Y from "yjs";
 
 export default function SessionPage() {
   const { id: sessionId } = useParams();
@@ -20,14 +21,28 @@ export default function SessionPage() {
   const [error, setError] = useState("");
 
   // ── Editor ─────────────────────────────────────────────────────────────────
-  const [selectedLanguage, setSelectedLanguage] = useState("javascript");
+  const [selectedLanguage, setSelectedLanguage] = useState("cpp");
+  const selectedLanguageRef = useRef("cpp");
+  useEffect(() => {
+    selectedLanguageRef.current = selectedLanguage;
+  }, [selectedLanguage]);
+
   const [code, setCode] = useState("");
   const editorRef = useRef(null);
+
+  // Yjs CRDT stable instances
+  const ydocRef = useRef(null);
+  const bindingRef = useRef(null);
+
+  if (!ydocRef.current) {
+    ydocRef.current = new Y.Doc();
+  }
 
   // ── Chat ───────────────────────────────────────────────────────────────────
   const [messages, setMessages] = useState([]);
   const [chatInput, setChatInput] = useState("");
   const chatEndRef = useRef(null);
+  const [isRequestingHint, setIsRequestingHint] = useState(false);
 
   // ── Console / run ──────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState("chat");
@@ -55,9 +70,19 @@ export default function SessionPage() {
         setUser(me);
         setSessionData(session);
 
-        const initialCode = session.problem?.starterCode?.["javascript"] ?? "// Start coding here";
-        setCode(initialCode);
-        editorRef.current?.setValue(initialCode);
+        // Set starter code only if Yjs text is empty
+        const ytext = ydocRef.current.getText("monaco");
+        if (ytext.toString() === "") {
+          const peer = session.users?.find(u => String(u._id) !== String(me._id));
+          const isInitializer = !peer || String(me._id) < String(peer._id);
+          if (isInitializer) {
+            const initialCode = session.problem?.starterCode?.["cpp"] ?? "// Start coding here";
+            ytext.insert(0, initialCode);
+            setCode(initialCode);
+          }
+        } else {
+          setCode(ytext.toString());
+        }
       } catch (err) {
         setError(err.message || "Failed to load session.");
         if (/authorized|token/i.test(err.message)) {
@@ -81,16 +106,72 @@ export default function SessionPage() {
     });
     socketRef.current = socket;
 
-    socket.on("connect", () => socket.emit("join_session", sessionId));
+    const ydoc = ydocRef.current;
 
-    socket.on("code_update", (updatedCode) => {
-      setCode(updatedCode);
-      if (editorRef.current && editorRef.current.getValue() !== updatedCode) {
-        editorRef.current.setValue(updatedCode);
+    // Listen to local Yjs document changes and stream updates over socket
+    const handleYjsUpdate = (update, origin) => {
+      if (origin !== "socket") {
+        socket.emit("code_change", { 
+          sessionId, 
+          update: Array.from(update) 
+        });
+      }
+    };
+    ydoc.on("update", handleYjsUpdate);
+
+    socket.on("connect", () => {
+      socket.emit("join_session", sessionId);
+      // Request latest Yjs state from other peer when connecting
+      socket.emit("yjs_sync_req", sessionId);
+    });
+
+    socket.on("code_update", (updateArray) => {
+      const update = new Uint8Array(updateArray);
+      Y.applyUpdate(ydoc, update, "socket");
+      setCode(ydoc.getText("monaco").toString());
+    });
+
+    socket.on("yjs_sync_req", ({ socketId }) => {
+      console.log("Relaying Yjs state to newly connected peer:", socketId);
+      const update = Y.encodeStateAsUpdate(ydoc);
+      socket.emit("yjs_sync_res", { 
+        targetSocketId: socketId, 
+        update: Array.from(update),
+        language: selectedLanguageRef.current
+      });
+    });
+
+    socket.on("yjs_sync_res", ({ update: updateArray, language }) => {
+      console.log("Synchronized Yjs document state from peer!");
+      const update = new Uint8Array(updateArray);
+      Y.applyUpdate(ydoc, update, "socket");
+      setCode(ydoc.getText("monaco").toString());
+      if (language) {
+        setSelectedLanguage(language);
       }
     });
 
-    socket.on("chat_update", (msg) => setMessages(prev => [...prev, msg]));
+    socket.on("language_update", ({ language }) => {
+      setSelectedLanguage(language);
+    });
+
+    socket.on("chat_update", (msg) => {
+      if (msg.text && msg.text.startsWith("🤖 **[AI HINT]** ")) {
+        const cleanText = msg.text.replace("🤖 **[AI HINT]** ", "");
+        setMessages(prev => [
+          ...prev,
+          {
+            userId: "gemini-ai",
+            userName: "Gemini Assistant",
+            text: cleanText,
+            timestamp: msg.timestamp || new Date()
+          }
+        ]);
+        setActiveTab("chat");
+      } else {
+        setMessages(prev => [...prev, msg]);
+      }
+    });
 
     socket.on("peer_status", ({ status }) => {
       setPeerOnline(status === "online");
@@ -112,9 +193,12 @@ export default function SessionPage() {
     return () => {
       socket.off("connect");
       socket.off("code_update");
+      socket.off("yjs_sync_req");
+      socket.off("yjs_sync_res");
       socket.off("chat_update");
       socket.off("peer_status");
       socket.off("call_signal");
+      ydoc.off("update", handleYjsUpdate);
       socket.emit("leave_session", sessionId);
       socket.disconnect();
       socketRef.current = null;
@@ -122,25 +206,46 @@ export default function SessionPage() {
   }, [sessionId]);
 
   // ═══ Editor handlers ══════════════════════════════════════════════════════
-  const handleEditorDidMount = (editor) => {
+  const handleEditorDidMount = async (editor) => {
     editorRef.current = editor;
-    if (code) editor.setValue(code);
+    
+    // Dynamically import y-monaco to avoid SSR "window is not defined" crash
+    const { MonacoBinding } = await import("y-monaco");
+
+    // Bind Yjs to Monaco
+    const ydoc = ydocRef.current;
+    const ytext = ydoc.getText("monaco");
+    
+    if (bindingRef.current) {
+      bindingRef.current.destroy();
+    }
+    
+    const binding = new MonacoBinding(
+      ytext,
+      editor.getModel(),
+      new Set([editor])
+    );
+    bindingRef.current = binding;
   };
 
   const handleEditorChange = (value) => {
-    const v = value || "";
-    setCode(v);
-    socketRef.current?.emit("code_change", { sessionId, code: v });
+    if (ydocRef.current) {
+      setCode(ydocRef.current.getText("monaco").toString());
+    }
   };
 
   const handleLanguageChange = (lang) => {
     setSelectedLanguage(lang);
     const newCode = sessionData?.problem?.starterCode?.[lang];
-    if (newCode) {
+    if (newCode && ydocRef.current) {
+      const ytext = ydocRef.current.getText("monaco");
+      ydocRef.current.transact(() => {
+        ytext.delete(0, ytext.length);
+        ytext.insert(0, newCode);
+      });
       setCode(newCode);
-      editorRef.current?.setValue(newCode);
-      socketRef.current?.emit("code_change", { sessionId, code: newCode });
     }
+    socketRef.current?.emit("language_change", { sessionId, language: lang });
   };
 
   // ═══ Chat ═════════════════════════════════════════════════════════════════
@@ -159,8 +264,9 @@ export default function SessionPage() {
   const handleRunCode = async () => {
     setIsRunning(true); setActiveTab("console");
     setExecutionReport(null); setConsoleOutput("Submitting to Judge0…");
+    const currentCode = ydocRef.current ? ydocRef.current.getText("monaco").toString() : code;
     try {
-      const report = await sessionApi.runCode(sessionId, { code, language: selectedLanguage });
+      const report = await sessionApi.runCode(sessionId, { code: currentCode, language: selectedLanguage });
       setExecutionReport(report);
     } catch (err) {
       setConsoleOutput(`Error: ${err.message}`);
@@ -170,12 +276,46 @@ export default function SessionPage() {
   const handleSubmitCode = async () => {
     setIsRunning(true); setActiveTab("console");
     setExecutionReport(null); setConsoleOutput("Submitting solution…");
+    const currentCode = ydocRef.current ? ydocRef.current.getText("monaco").toString() : code;
     try {
-      const report = await sessionApi.submitSolution(sessionId, { code, language: selectedLanguage });
+      const report = await sessionApi.submitSolution(sessionId, { code: currentCode, language: selectedLanguage });
       setExecutionReport(report);
     } catch (err) {
       setConsoleOutput(`Error: ${err.message}`);
     } finally { setIsRunning(false); }
+  };
+
+  const handleRequestHint = async () => {
+    setIsRequestingHint(true);
+    setActiveTab("chat");
+    const currentCode = ydocRef.current ? ydocRef.current.getText("monaco").toString() : code;
+    try {
+      const response = await sessionApi.getHint(sessionId, { code: currentCode, language: selectedLanguage });
+      const hintText = response.hint || "No hint generated. Try again!";
+      
+      const aiMsg = {
+        userId: "gemini-ai",
+        userName: "Gemini Assistant",
+        text: hintText,
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, aiMsg]);
+
+      socketRef.current?.emit("chat_message", {
+        sessionId,
+        text: `🤖 **[AI HINT]** ${hintText}`
+      });
+    } catch (err) {
+      const errMsg = {
+        userId: "gemini-ai",
+        userName: "Gemini Assistant",
+        text: `Failed to request AI hint: ${err.message || "Unknown error"}`,
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, errMsg]);
+    } finally {
+      setIsRequestingHint(false);
+    }
   };
 
   // ═══ Call Signaling ═══════════════════════════════════════════════════════
@@ -456,6 +596,57 @@ export default function SessionPage() {
               background: "#0C0C0E", display: "flex", alignItems: "center",
               justifyContent: "flex-end", padding: "0 16px", gap: "12px", flexShrink: 0
             }}>
+              <button onClick={handleRequestHint} disabled={isRequestingHint || isRunning}
+                style={{
+                  marginRight: "auto",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  background: "linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(99, 102, 241, 0.2) 100%)",
+                  border: "1px solid rgba(139, 92, 246, 0.4)",
+                  boxShadow: "0 0 10px rgba(139, 92, 246, 0.1)",
+                  borderRadius: "6px",
+                  padding: "6px 14px",
+                  fontSize: "13px",
+                  fontWeight: "500",
+                  color: "#D8B4FE",
+                  cursor: (isRequestingHint || isRunning) ? "not-allowed" : "pointer",
+                  transition: "all 0.2s ease-in-out",
+                  opacity: (isRequestingHint || isRunning) ? 0.6 : 1,
+                  outline: "none"
+                }}
+                onMouseEnter={e => {
+                  if (!isRequestingHint && !isRunning) {
+                    e.currentTarget.style.background = "linear-gradient(135deg, rgba(139, 92, 246, 0.3) 0%, rgba(99, 102, 241, 0.3) 100%)";
+                    e.currentTarget.style.borderColor = "rgba(139, 92, 246, 0.6)";
+                    e.currentTarget.style.boxShadow = "0 0 15px rgba(139, 92, 246, 0.3)";
+                  }
+                }}
+                onMouseLeave={e => {
+                  if (!isRequestingHint && !isRunning) {
+                    e.currentTarget.style.background = "linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(99, 102, 241, 0.2) 100%)";
+                    e.currentTarget.style.borderColor = "rgba(139, 92, 246, 0.4)";
+                    e.currentTarget.style.boxShadow = "0 0 10px rgba(139, 92, 246, 0.1)";
+                  }
+                }}
+              >
+                {isRequestingHint ? (
+                  <>
+                    <svg style={{ animation: "cm-spin 1s linear infinite", width: 14, height: 14 }}
+                      viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                    </svg>
+                    <span>Thinking…</span>
+                  </>
+                ) : (
+                  <>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/>
+                    </svg>
+                    <span>Ask Gemini ✨</span>
+                  </>
+                )}
+              </button>
               <button onClick={handleRunCode} disabled={isRunning}
                 style={{
                   background: "rgba(255,255,255,0.04)", color: "#fff",
@@ -516,6 +707,45 @@ export default function SessionPage() {
                       </div>
                     ) : messages.map((msg, i) => {
                       const isMe = msg.userId === user?._id;
+                      const isAI = msg.userId === "gemini-ai";
+                      if (isAI) {
+                        return (
+                          <div key={i} style={{
+                            display: "flex", flexDirection: "column",
+                            alignSelf: "center", width: "90%", margin: "8px 0"
+                          }}>
+                            <div style={{
+                              display: "flex", alignItems: "center", gap: "6px",
+                              fontSize: "11px", fontWeight: "600", color: "#A78BFA",
+                              marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.05em"
+                            }}>
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: "#A78BFA" }}>
+                                <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/>
+                                <path d="m5 3 1 2.5L8.5 6 6 7 5 9.5 4 7 1.5 6 4 5 5 3Z" fill="currentColor" stroke="none" style={{ opacity: 0.7 }} />
+                                <path d="m19 17 1 2.5 2.5.5-2.5 1-1 2.5-1-2.5-2.5-1 2.5-1 1-2.5Z" fill="currentColor" stroke="none" style={{ opacity: 0.7 }} />
+                              </svg>
+                              Gemini Code Mentor ✨
+                              <span style={{ fontSize: "9px", color: "#71717A", textTransform: "none", fontWeight: "normal", marginLeft: "auto" }}>
+                                {new Date(msg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                              </span>
+                            </div>
+                            <div style={{
+                              background: "linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(76, 29, 149, 0.05) 100%)",
+                              border: "1px solid rgba(139, 92, 246, 0.3)",
+                              boxShadow: "0 0 15px rgba(139, 92, 246, 0.15)",
+                              borderRadius: "10px",
+                              padding: "12px 16px",
+                              fontSize: "13px",
+                              lineHeight: "1.5",
+                              color: "#E4E4E7",
+                              wordBreak: "break-word",
+                              position: "relative"
+                            }}>
+                              {msg.text}
+                            </div>
+                          </div>
+                        );
+                      }
                       return (
                         <div key={i} style={{
                           display: "flex", flexDirection: "column",

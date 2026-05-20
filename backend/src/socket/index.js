@@ -44,8 +44,20 @@ export default function setupSocket(server) {
       socket.to(sessionId).emit("peer_status", { userId: socket.userId, status: "online" });
     });
 
-    socket.on("code_change", ({ sessionId, code }) => {
-      socket.to(sessionId).emit("code_update", code);
+    socket.on("code_change", ({ sessionId, update }) => {
+      socket.to(sessionId).emit("code_update", update);
+    });
+
+    socket.on("yjs_sync_req", (sessionId) => {
+      socket.to(sessionId).emit("yjs_sync_req", { socketId: socket.id });
+    });
+
+    socket.on("yjs_sync_res", ({ targetSocketId, update, language }) => {
+      io.to(targetSocketId).emit("yjs_sync_res", { update, language });
+    });
+
+    socket.on("language_change", ({ sessionId, language }) => {
+      socket.to(sessionId).emit("language_update", { language });
     });
 
     socket.on("chat_message", ({ sessionId, text }) => {

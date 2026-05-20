@@ -54,4 +54,9 @@ export const sessionApi = {
       method: "POST",
       data: payload,
     }),
+  getHint: (id, payload) =>
+    request(`/session/${id}/hint`, {
+      method: "POST",
+      data: payload,
+    }),
 };
