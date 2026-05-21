@@ -157,6 +157,10 @@ export const QUESTIONS = {
     testCases: [
       { input: [[1, 2, 3, 4]], expected: [24, 12, 8, 6] },
       { input: [[-1, 1, 0, -3, 3]], expected: [0, 0, 9, 0, 0] },
+      // two elements
+      { input: [[3, 4]], expected: [4, 3] },
+      // array with two zeros — all products are 0
+      { input: [[0, 0, 2]], expected: [0, 0, 0] },
     ],
   },
 
@@ -237,6 +241,10 @@ export const QUESTIONS = {
       { input: ["babad"], expected: "bab" },
       { input: ["cbbd"], expected: "bb" },
       { input: ["a"], expected: "a" },
+      // all same characters — entire string is palindrome
+      { input: ["aaaa"], expected: "aaaa" },
+      // no palindrome longer than 1 — return first char
+      { input: ["abcd"], expected: "a" },
     ],
   },
 
@@ -1376,11 +1384,19 @@ export const QUESTIONS = {
     starterCode: {
       javascript:
         "/**\n * @param {number[]} prices\n * @return {number}\n */\nvar maxProfit = function(prices) {\n    // Write your solution here\n};",
+      python:
+        "class Solution:\n    def maxProfit(self, prices: List[int]) -> int:\n        # Write your solution here\n        pass",
+      cpp:
+        "#include <vector>\n#include <algorithm>\nusing namespace std;\n\nclass Solution {\npublic:\n    int maxProfit(vector<int>& prices) {\n        // Write your solution here\n    }\n};",
     },
 
     solution: {
       javascript:
         "var maxProfit = function(prices) {\n    let min = Infinity;\n    let profit = 0;\n\n    for (const price of prices) {\n        min = Math.min(min, price);\n        profit = Math.max(profit, price - min);\n    }\n\n    return profit;\n};",
+      python:
+        "class Solution:\n    def maxProfit(self, prices):\n        min_price = float('inf')\n        profit = 0\n        for p in prices:\n            min_price = min(min_price, p)\n            profit = max(profit, p - min_price)\n        return profit",
+      cpp:
+        "int maxProfit(vector<int>& prices) {\n    int mn = INT_MAX, profit = 0;\n    for (int p : prices) {\n        mn = min(mn, p);\n        profit = max(profit, p - mn);\n    }\n    return profit;\n}",
     },
 
     testCases: [
@@ -1388,6 +1404,8 @@ export const QUESTIONS = {
       { input: [[7, 6, 4, 3, 1]], expected: 0 },
       { input: [[2, 4, 1]], expected: 2 },
       { input: [[1, 2]], expected: 1 },
+      // edge: single element — no transaction possible
+      { input: [[5]], expected: 0 },
     ],
   },
 
@@ -1419,11 +1437,19 @@ export const QUESTIONS = {
     starterCode: {
       javascript:
         "/**\n * @param {string[]} strs\n * @return {string}\n */\nvar longestCommonPrefix = function(strs) {\n    // Write your solution here\n};",
+      python:
+        "class Solution:\n    def longestCommonPrefix(self, strs: List[str]) -> str:\n        # Write your solution here\n        pass",
+      cpp:
+        "#include <string>\n#include <vector>\nusing namespace std;\n\nclass Solution {\npublic:\n    string longestCommonPrefix(vector<string>& strs) {\n        // Write your solution here\n    }\n};",
     },
 
     solution: {
       javascript:
         "var longestCommonPrefix = function(strs) {\n    let prefix = strs[0];\n\n    for (let i = 1; i < strs.length; i++) {\n        while (!strs[i].startsWith(prefix)) {\n            prefix = prefix.slice(0, -1);\n        }\n    }\n\n    return prefix;\n};",
+      python:
+        "class Solution:\n    def longestCommonPrefix(self, strs):\n        prefix = strs[0]\n        for s in strs[1:]:\n            while not s.startswith(prefix):\n                prefix = prefix[:-1]\n        return prefix",
+      cpp:
+        "string longestCommonPrefix(vector<string>& strs) {\n    string prefix = strs[0];\n    for (int i = 1; i < strs.size(); i++)\n        while (strs[i].find(prefix) != 0)\n            prefix = prefix.substr(0, prefix.size() - 1);\n    return prefix;\n}",
     },
 
     testCases: [
@@ -1431,6 +1457,8 @@ export const QUESTIONS = {
       { input: [["dog", "racecar", "car"]], expected: "" },
       { input: [["interspecies", "interstellar", "interstate"]], expected: "inters" },
       { input: [["a"]], expected: "a" },
+      // edge: empty string in list forces empty prefix
+      { input: [["", "b"]], expected: "" },
     ],
   },
 
@@ -1445,29 +1473,41 @@ export const QUESTIONS = {
     topic: "Linked Lists",
 
     description:
-      "Given the head of a linked list, remove the nth node from the end and return its head.",
+      "Given the `head` of a linked list, remove the **n-th node from the end** of the list and return its head.\n\nUse a **two-pointer (fast/slow)** technique to solve this in one pass.",
 
     examples: [
       {
         input: "head = [1,2,3,4,5], n = 2",
         output: "[1,2,3,5]",
+        explanation: "The 2nd node from the end is 4. Remove it.",
       },
+      { input: "head = [1], n = 1", output: "[]" },
+      { input: "head = [1,2], n = 1", output: "[1]" },
     ],
 
     constraints: [
       "The number of nodes in the list is sz.",
       "1 <= sz <= 30",
       "0 <= Node.val <= 100",
+      "1 <= n <= sz",
     ],
 
     starterCode: {
       javascript:
         "/**\n * @param {ListNode} head\n * @param {number} n\n * @return {ListNode}\n */\nvar removeNthFromEnd = function(head, n) {\n    // Write your solution here\n};",
+      python:
+        "class Solution:\n    def removeNthFromEnd(self, head: Optional[ListNode], n: int) -> Optional[ListNode]:\n        # Write your solution here\n        pass",
+      cpp:
+        "class Solution {\npublic:\n    ListNode* removeNthFromEnd(ListNode* head, int n) {\n        // Write your solution here\n    }\n};",
     },
 
     solution: {
       javascript:
         "var removeNthFromEnd = function(head, n) {\n    const dummy = new ListNode(0, head);\n    let slow = dummy;\n    let fast = dummy;\n\n    for (let i = 0; i <= n; i++) {\n        fast = fast.next;\n    }\n\n    while (fast) {\n        slow = slow.next;\n        fast = fast.next;\n    }\n\n    slow.next = slow.next.next;\n\n    return dummy.next;\n};",
+      python:
+        "class Solution:\n    def removeNthFromEnd(self, head, n):\n        dummy = ListNode(0, head)\n        slow = fast = dummy\n        for _ in range(n + 1):\n            fast = fast.next\n        while fast:\n            slow = slow.next\n            fast = fast.next\n        slow.next = slow.next.next\n        return dummy.next",
+      cpp:
+        "ListNode* removeNthFromEnd(ListNode* head, int n) {\n    ListNode dummy(0, head);\n    ListNode* slow = &dummy;\n    ListNode* fast = &dummy;\n    for (int i = 0; i <= n; i++) fast = fast->next;\n    while (fast) { slow = slow->next; fast = fast->next; }\n    slow->next = slow->next->next;\n    return dummy.next;\n}",
     },
 
     testCases: [
@@ -1475,6 +1515,8 @@ export const QUESTIONS = {
       { input: [[1], 1], expected: [] },
       { input: [[1, 2], 1], expected: [1] },
       { input: [[1, 2], 2], expected: [2] },
+      // edge: remove head (n == length)
+      { input: [[1, 2, 3], 3], expected: [2, 3] },
     ],
   },
 
@@ -1489,27 +1531,45 @@ export const QUESTIONS = {
     topic: "Trees",
 
     description:
-      "Given the roots of two binary trees p and q, return true if they are the same tree.",
+      "Given the roots of two binary trees `p` and `q`, write a function to check if they are the **same** tree.\n\nTwo binary trees are considered the same if they are structurally identical, and the nodes have the same value.",
 
     examples: [
       {
         input: "p = [1,2,3], q = [1,2,3]",
         output: "true",
       },
+      {
+        input: "p = [1,2], q = [1,null,2]",
+        output: "false",
+        explanation: "Different structure — left vs right child.",
+      },
+      {
+        input: "p = [1,2,1], q = [1,1,2]",
+        output: "false",
+      },
     ],
 
     constraints: [
       "The number of nodes in both trees is in the range [0, 100].",
+      "-10^4 <= Node.val <= 10^4",
     ],
 
     starterCode: {
       javascript:
         "/**\n * @param {TreeNode} p\n * @param {TreeNode} q\n * @return {boolean}\n */\nvar isSameTree = function(p, q) {\n    // Write your solution here\n};",
+      python:
+        "class Solution:\n    def isSameTree(self, p: Optional[TreeNode], q: Optional[TreeNode]) -> bool:\n        # Write your solution here\n        pass",
+      cpp:
+        "class Solution {\npublic:\n    bool isSameTree(TreeNode* p, TreeNode* q) {\n        // Write your solution here\n    }\n};",
     },
 
     solution: {
       javascript:
         "var isSameTree = function(p, q) {\n    if (!p && !q) return true;\n    if (!p || !q) return false;\n    if (p.val !== q.val) return false;\n\n    return isSameTree(p.left, q.left) && isSameTree(p.right, q.right);\n};",
+      python:
+        "class Solution:\n    def isSameTree(self, p, q):\n        if not p and not q: return True\n        if not p or not q: return False\n        if p.val != q.val: return False\n        return self.isSameTree(p.left, q.left) and self.isSameTree(p.right, q.right)",
+      cpp:
+        "bool isSameTree(TreeNode* p, TreeNode* q) {\n    if (!p && !q) return true;\n    if (!p || !q) return false;\n    if (p->val != q->val) return false;\n    return isSameTree(p->left, q->left) && isSameTree(p->right, q->right);\n}",
     },
 
     testCases: [
@@ -1517,6 +1577,8 @@ export const QUESTIONS = {
       { input: [[1, 2], [1, null, 2]], expected: false },
       { input: [[1, 2, 1], [1, 1, 2]], expected: false },
       { input: [[], []], expected: true },
+      // edge: one empty, one non-empty
+      { input: [[], [1]], expected: false },
     ],
   },
 
@@ -1531,48 +1593,75 @@ export const QUESTIONS = {
     topic: "Graphs",
 
     description:
-      "Return all coordinates where water can flow to both the Pacific and Atlantic oceans.",
+      "There is an `m x n` rectangular island that borders both the **Pacific Ocean** (top/left edges) and the **Atlantic Ocean** (bottom/right edges).\n\nRain water can flow to a neighboring cell (north, south, east, west) only if the neighboring cell's height is **less than or equal to** the current cell's height.\n\nReturn a list of grid coordinates where water can flow to **both** the Pacific and Atlantic ocean.",
 
     examples: [
       {
-        input: "heights = [[1,2,2,3,5],[3,2,3,4,4],[2,4,5,3,1]]",
-        output: "[[0,4],[1,3]]",
+        input: "heights = [[1,2,2,3,5],[3,2,3,4,4],[2,4,5,3,1],[6,7,1,4,5],[5,1,1,2,4]]",
+        output: "[[0,4],[1,3],[1,4],[2,2],[3,0],[3,1],[4,0]]",
+      },
+      {
+        input: "heights = [[1]]",
+        output: "[[0,0]]",
+        explanation: "Single cell borders both oceans.",
       },
     ],
 
     constraints: [
-      "1 <= heights.length, heights[0].length <= 200",
+      "m == heights.length",
+      "n == heights[r].length",
+      "1 <= m, n <= 200",
+      "0 <= heights[r][c] <= 10^5",
     ],
 
     starterCode: {
       javascript:
         "/**\n * @param {number[][]} heights\n * @return {number[][]}\n */\nvar pacificAtlantic = function(heights) {\n    // Write your solution here\n};",
+      python:
+        "class Solution:\n    def pacificAtlantic(self, heights: List[List[int]]) -> List[List[int]]:\n        # Write your solution here\n        pass",
+      cpp:
+        "#include <vector>\n#include <set>\nusing namespace std;\n\nclass Solution {\npublic:\n    vector<vector<int>> pacificAtlantic(vector<vector<int>>& heights) {\n        // Write your solution here\n    }\n};",
     },
 
     solution: {
       javascript:
         "var pacificAtlantic = function(heights) {\n    const rows = heights.length;\n    const cols = heights[0].length;\n\n    const pac = new Set();\n    const atl = new Set();\n\n    const dfs = (r, c, visit, prev) => {\n        const key = `${r},${c}`;\n\n        if (\n            r < 0 || c < 0 ||\n            r >= rows || c >= cols ||\n            visit.has(key) ||\n            heights[r][c] < prev\n        ) return;\n\n        visit.add(key);\n\n        dfs(r + 1, c, visit, heights[r][c]);\n        dfs(r - 1, c, visit, heights[r][c]);\n        dfs(r, c + 1, visit, heights[r][c]);\n        dfs(r, c - 1, visit, heights[r][c]);\n    };\n\n    for (let c = 0; c < cols; c++) {\n        dfs(0, c, pac, 0);\n        dfs(rows - 1, c, atl, 0);\n    }\n\n    for (let r = 0; r < rows; r++) {\n        dfs(r, 0, pac, 0);\n        dfs(r, cols - 1, atl, 0);\n    }\n\n    const res = [];\n\n    for (let r = 0; r < rows; r++) {\n        for (let c = 0; c < cols; c++) {\n            const key = `${r},${c}`;\n            if (pac.has(key) && atl.has(key)) {\n                res.push([r, c]);\n            }\n        }\n    }\n\n    return res;\n};",
+      python:
+        "class Solution:\n    def pacificAtlantic(self, heights):\n        rows, cols = len(heights), len(heights[0])\n        pac, atl = set(), set()\n\n        def dfs(r, c, visit, prev):\n            if (r, c) in visit or r < 0 or c < 0 or r >= rows or c >= cols or heights[r][c] < prev:\n                return\n            visit.add((r, c))\n            for dr, dc in [(1,0),(-1,0),(0,1),(0,-1)]:\n                dfs(r+dr, c+dc, visit, heights[r][c])\n\n        for c in range(cols):\n            dfs(0, c, pac, 0)\n            dfs(rows-1, c, atl, 0)\n        for r in range(rows):\n            dfs(r, 0, pac, 0)\n            dfs(r, cols-1, atl, 0)\n\n        return [[r, c] for r in range(rows) for c in range(cols) if (r,c) in pac and (r,c) in atl]",
+      cpp:
+        "vector<vector<int>> pacificAtlantic(vector<vector<int>>& h) {\n    int R=h.size(), C=h[0].size();\n    vector<vector<bool>> pac(R,vector<bool>(C,false)), atl(R,vector<bool>(C,false));\n    function<void(int,int,vector<vector<bool>>&,int)> dfs=[&](int r,int c,vector<vector<bool>>& vis,int prev){\n        if(r<0||c<0||r>=R||c>=C||vis[r][c]||h[r][c]<prev) return;\n        vis[r][c]=true;\n        dfs(r+1,c,vis,h[r][c]); dfs(r-1,c,vis,h[r][c]);\n        dfs(r,c+1,vis,h[r][c]); dfs(r,c-1,vis,h[r][c]);\n    };\n    for(int c=0;c<C;c++){dfs(0,c,pac,0);dfs(R-1,c,atl,0);}\n    for(int r=0;r<R;r++){dfs(r,0,pac,0);dfs(r,C-1,atl,0);}\n    vector<vector<int>> res;\n    for(int r=0;r<R;r++) for(int c=0;c<C;c++) if(pac[r][c]&&atl[r][c]) res.push_back({r,c});\n    return res;\n}",
     },
 
     testCases: [
       {
+        // Full 5-row example from the problem description
         input: [
           [
             [1, 2, 2, 3, 5],
             [3, 2, 3, 4, 4],
-            [2, 4, 5, 3, 1]
+            [2, 4, 5, 3, 1],
+            [6, 7, 1, 4, 5],
+            [5, 1, 1, 2, 4]
           ]
         ],
-        expected: [[0, 4], [1, 3]]
+        expected: [[0, 4], [1, 3], [1, 4], [2, 2], [3, 0], [3, 1], [4, 0]]
       },
       {
-        input: [
-          [
-            [1]
-          ]
-        ],
+        // Single cell borders both oceans
+        input: [[[1]]],
         expected: [[0, 0]]
-      }
+      },
+      {
+        // Uniform grid — every cell reaches both oceans
+        input: [[[1, 1], [1, 1]]],
+        expected: [[0, 0], [0, 1], [1, 0], [1, 1]]
+      },
+      {
+        // Strictly increasing row — only top-right corner reaches Pacific,
+        // only bottom-left corner reaches Atlantic; [0,2] and [1,0] reach both
+        input: [[[1, 2, 3], [4, 5, 6]]],
+        expected: [[0, 2], [1, 0], [1, 1], [1, 2]]
+      },
     ],
   },
   // ─────────────────────────────────────────────
@@ -1604,17 +1693,30 @@ export const QUESTIONS = {
     starterCode: {
       javascript:
         "/**\n * @param {number} target\n * @param {number[]} nums\n * @return {number}\n */\nvar minSubArrayLen = function(target, nums) {\n    // Write your solution here\n};",
+      python:
+        "class Solution:\n    def minSubArrayLen(self, target: int, nums: List[int]) -> int:\n        # Write your solution here\n        pass",
+      cpp:
+        "#include <vector>\n#include <climits>\nusing namespace std;\n\nclass Solution {\npublic:\n    int minSubArrayLen(int target, vector<int>& nums) {\n        // Write your solution here\n    }\n};",
     },
 
     solution: {
       javascript:
         "var minSubArrayLen = function(target, nums) {\n    let left = 0;\n    let sum = 0;\n    let res = Infinity;\n\n    for (let right = 0; right < nums.length; right++) {\n        sum += nums[right];\n\n        while (sum >= target) {\n            res = Math.min(res, right - left + 1);\n            sum -= nums[left];\n            left++;\n        }\n    }\n\n    return res === Infinity ? 0 : res;\n};",
+      python:
+        "class Solution:\n    def minSubArrayLen(self, target, nums):\n        left = 0\n        total = 0\n        res = float('inf')\n        for right in range(len(nums)):\n            total += nums[right]\n            while total >= target:\n                res = min(res, right - left + 1)\n                total -= nums[left]\n                left += 1\n        return 0 if res == float('inf') else res",
+      cpp:
+        "int minSubArrayLen(int target, vector<int>& nums) {\n    int left = 0, sum = 0, res = INT_MAX;\n    for (int right = 0; right < (int)nums.size(); right++) {\n        sum += nums[right];\n        while (sum >= target) {\n            res = min(res, right - left + 1);\n            sum -= nums[left++];\n        }\n    }\n    return res == INT_MAX ? 0 : res;\n}",
     },
 
     testCases: [
       { input: [7, [2, 3, 1, 2, 4, 3]], expected: 2 },
       { input: [4, [1, 4, 4]], expected: 1 },
+      // sum never reaches target → return 0
       { input: [11, [1, 1, 1, 1, 1, 1, 1, 1]], expected: 0 },
+      // single element equals target
+      { input: [4, [4]], expected: 1 },
+      // entire array needed
+      { input: [15, [1, 2, 3, 4, 5]], expected: 5 },
     ],
   },
 
@@ -1646,17 +1748,29 @@ export const QUESTIONS = {
     starterCode: {
       javascript:
         "/**\n * @param {number[]} nums\n * @param {number} target\n * @return {number}\n */\nvar searchInsert = function(nums, target) {\n    // Write your solution here\n};",
+      python:
+        "class Solution:\n    def searchInsert(self, nums: List[int], target: int) -> int:\n        # Write your solution here\n        pass",
+      cpp:
+        "#include <vector>\nusing namespace std;\n\nclass Solution {\npublic:\n    int searchInsert(vector<int>& nums, int target) {\n        // Write your solution here\n    }\n};",
     },
 
     solution: {
       javascript:
         "var searchInsert = function(nums, target) {\n    let left = 0;\n    let right = nums.length - 1;\n\n    while (left <= right) {\n        const mid = Math.floor((left + right) / 2);\n\n        if (nums[mid] === target) return mid;\n\n        if (nums[mid] < target) {\n            left = mid + 1;\n        } else {\n            right = mid - 1;\n        }\n    }\n\n    return left;\n};",
+      python:
+        "class Solution:\n    def searchInsert(self, nums, target):\n        lo, hi = 0, len(nums) - 1\n        while lo <= hi:\n            mid = (lo + hi) // 2\n            if nums[mid] == target: return mid\n            elif nums[mid] < target: lo = mid + 1\n            else: hi = mid - 1\n        return lo",
+      cpp:
+        "int searchInsert(vector<int>& nums, int target) {\n    int lo = 0, hi = (int)nums.size() - 1;\n    while (lo <= hi) {\n        int mid = (lo + hi) / 2;\n        if (nums[mid] == target) return mid;\n        else if (nums[mid] < target) lo = mid + 1;\n        else hi = mid - 1;\n    }\n    return lo;\n}",
     },
 
     testCases: [
       { input: [[1, 3, 5, 6], 5], expected: 2 },
       { input: [[1, 3, 5, 6], 2], expected: 1 },
       { input: [[1, 3, 5, 6], 7], expected: 4 },
+      // insert at beginning
+      { input: [[1, 3, 5, 6], 0], expected: 0 },
+      // single-element array, target absent
+      { input: [[1], 0], expected: 0 },
     ],
   },
 
@@ -1671,12 +1785,18 @@ export const QUESTIONS = {
     topic: "Heap / Priority Queue",
 
     description:
-      "You are given an array of integers stones where stones[i] is the weight of the ith stone.",
+      "You are given an array of integers `stones` where `stones[i]` is the weight of the `i`-th stone.\n\nWe are playing a game with the stones. On each turn, we choose the **two heaviest** stones and smash them together. Suppose the heaviest two stones have weights `x` and `y` where `x <= y`:\n\n- If `x == y`, both stones are destroyed.\n- If `x != y`, the stone of weight `x` is destroyed and the stone of weight `y` has new weight `y - x`.\n\nAt the end of the game, there is **at most one** stone left. Return the weight of the last remaining stone. If there are no stones left, return `0`.",
 
     examples: [
       {
         input: "stones = [2,7,4,1,8,1]",
         output: "1",
+        explanation: "Smash 8 and 7 → 1; smash 4 and 2 → 2; smash 2 and 1 → 1; smash 1 and 1 → 0; one stone (1) remains.",
+      },
+      {
+        input: "stones = [1]",
+        output: "1",
+        explanation: "Only one stone, no smashing needed.",
       },
     ],
 
@@ -1688,17 +1808,31 @@ export const QUESTIONS = {
     starterCode: {
       javascript:
         "/**\n * @param {number[]} stones\n * @return {number}\n */\nvar lastStoneWeight = function(stones) {\n    // Write your solution here\n};",
+      python:
+        "class Solution:\n    def lastStoneWeight(self, stones: List[int]) -> int:\n        # Write your solution here\n        pass",
+      cpp:
+        "#include <vector>\n#include <queue>\nusing namespace std;\n\nclass Solution {\npublic:\n    int lastStoneWeight(vector<int>& stones) {\n        // Write your solution here\n    }\n};",
     },
 
     solution: {
       javascript:
         "var lastStoneWeight = function(stones) {\n    while (stones.length > 1) {\n        stones.sort((a, b) => b - a);\n\n        let y = stones.shift();\n        let x = stones.shift();\n\n        if (y !== x) {\n            stones.push(y - x);\n        }\n    }\n\n    return stones.length ? stones[0] : 0;\n};",
+      python:
+        "import heapq\nclass Solution:\n    def lastStoneWeight(self, stones):\n        # Python's heapq is a min-heap; negate values to simulate max-heap\n        heap = [-s for s in stones]\n        heapq.heapify(heap)\n        while len(heap) > 1:\n            y = -heapq.heappop(heap)\n            x = -heapq.heappop(heap)\n            if y != x:\n                heapq.heappush(heap, -(y - x))\n        return -heap[0] if heap else 0",
+      cpp:
+        "int lastStoneWeight(vector<int>& stones) {\n    priority_queue<int> pq(stones.begin(), stones.end());\n    while (pq.size() > 1) {\n        int y = pq.top(); pq.pop();\n        int x = pq.top(); pq.pop();\n        if (y != x) pq.push(y - x);\n    }\n    return pq.empty() ? 0 : pq.top();\n}",
     },
 
     testCases: [
       { input: [[2, 7, 4, 1, 8, 1]], expected: 1 },
+      // single stone — returned as-is
       { input: [[1]], expected: 1 },
+      // two equal stones — both destroyed
       { input: [[9, 3, 2, 10]], expected: 0 },
+      // all equal — 4 stones smash down to 0
+      { input: [[5, 5, 5, 5]], expected: 0 },
+      // two unequal stones — difference remains
+      { input: [[3, 7]], expected: 4 },
     ],
   },
 
@@ -1713,12 +1847,17 @@ export const QUESTIONS = {
     topic: "Dynamic Programming",
 
     description:
-      "A robot is located at the top-left corner of a m x n grid. The robot can only move either down or right.",
+      "A robot is located at the **top-left corner** of a `m x n` grid (marked 'Start' in the diagram below).\n\nThe robot can only move either **down** or **right** at any point in time. The robot is trying to reach the **bottom-right corner** of the grid (marked 'Finish').\n\nHow many possible **unique paths** are there?",
 
     examples: [
       {
         input: "m = 3, n = 7",
         output: "28",
+      },
+      {
+        input: "m = 3, n = 2",
+        output: "3",
+        explanation: "Three paths: right→down→down, down→right→down, down→down→right.",
       },
     ],
 
@@ -1729,17 +1868,30 @@ export const QUESTIONS = {
     starterCode: {
       javascript:
         "/**\n * @param {number} m\n * @param {number} n\n * @return {number}\n */\nvar uniquePaths = function(m, n) {\n    // Write your solution here\n};",
+      python:
+        "class Solution:\n    def uniquePaths(self, m: int, n: int) -> int:\n        # Write your solution here\n        pass",
+      cpp:
+        "#include <vector>\nusing namespace std;\n\nclass Solution {\npublic:\n    int uniquePaths(int m, int n) {\n        // Write your solution here\n    }\n};",
     },
 
     solution: {
       javascript:
         "var uniquePaths = function(m, n) {\n    const dp = Array(n).fill(1);\n\n    for (let i = 1; i < m; i++) {\n        for (let j = 1; j < n; j++) {\n            dp[j] += dp[j - 1];\n        }\n    }\n\n    return dp[n - 1];\n};",
+      python:
+        "class Solution:\n    def uniquePaths(self, m, n):\n        dp = [1] * n\n        for _ in range(1, m):\n            for j in range(1, n):\n                dp[j] += dp[j - 1]\n        return dp[-1]",
+      cpp:
+        "int uniquePaths(int m, int n) {\n    vector<int> dp(n, 1);\n    for (int i = 1; i < m; i++)\n        for (int j = 1; j < n; j++)\n            dp[j] += dp[j - 1];\n    return dp[n - 1];\n}",
     },
 
     testCases: [
       { input: [3, 7], expected: 28 },
       { input: [3, 2], expected: 3 },
+      // single cell — only one trivial path
       { input: [1, 1], expected: 1 },
+      // single row — only one path (all right)
+      { input: [1, 5], expected: 1 },
+      // single column — only one path (all down)
+      { input: [5, 1], expected: 1 },
     ],
   },
 
@@ -1754,27 +1906,45 @@ export const QUESTIONS = {
     topic: "Backtracking",
 
     description:
-      "Given a string containing digits from 2-9 inclusive, return all possible letter combinations that the number could represent.",
+      "Given a string containing digits from `2-9` inclusive, return all possible letter combinations that the number could represent. Return the answer in **any order**.\n\nA mapping of digits to letters (just like on telephone buttons) is given below. Note that `1` does not map to any letters.\n\n```\n2 → abc   3 → def   4 → ghi   5 → jkl\n6 → mno   7 → pqrs  8 → tuv   9 → wxyz\n```",
 
     examples: [
       {
         input: 'digits = "23"',
         output: '["ad","ae","af","bd","be","bf","cd","ce","cf"]',
       },
+      {
+        input: 'digits = ""',
+        output: "[]",
+        explanation: "Empty input returns an empty array.",
+      },
+      {
+        input: 'digits = "2"',
+        output: '["a","b","c"]',
+      },
     ],
 
     constraints: [
       "0 <= digits.length <= 4",
+      "digits[i] is a digit in the range ['2', '9'].",
     ],
 
     starterCode: {
       javascript:
         "/**\n * @param {string} digits\n * @return {string[]}\n */\nvar letterCombinations = function(digits) {\n    // Write your solution here\n};",
+      python:
+        "class Solution:\n    def letterCombinations(self, digits: str) -> List[str]:\n        # Write your solution here\n        pass",
+      cpp:
+        "#include <string>\n#include <vector>\nusing namespace std;\n\nclass Solution {\npublic:\n    vector<string> letterCombinations(string digits) {\n        // Write your solution here\n    }\n};",
     },
 
     solution: {
       javascript:
         "var letterCombinations = function(digits) {\n    if (!digits.length) return [];\n\n    const map = {\n        2: 'abc',\n        3: 'def',\n        4: 'ghi',\n        5: 'jkl',\n        6: 'mno',\n        7: 'pqrs',\n        8: 'tuv',\n        9: 'wxyz'\n    };\n\n    const res = [];\n\n    const backtrack = (i, str) => {\n        if (str.length === digits.length) {\n            res.push(str);\n            return;\n        }\n\n        for (const ch of map[digits[i]]) {\n            backtrack(i + 1, str + ch);\n        }\n    };\n\n    backtrack(0, '');\n\n    return res;\n};",
+      python:
+        "class Solution:\n    def letterCombinations(self, digits):\n        if not digits: return []\n        phone = {\n            '2': 'abc', '3': 'def', '4': 'ghi', '5': 'jkl',\n            '6': 'mno', '7': 'pqrs', '8': 'tuv', '9': 'wxyz'\n        }\n        res = []\n        def bt(i, curr):\n            if i == len(digits):\n                res.append(curr); return\n            for ch in phone[digits[i]]:\n                bt(i + 1, curr + ch)\n        bt(0, '')\n        return res",
+      cpp:
+        "vector<string> letterCombinations(string digits) {\n    if (digits.empty()) return {};\n    unordered_map<char, string> phone = {\n        {'2',\"abc\"},{'3',\"def\"},{'4',\"ghi\"},{'5',\"jkl\"},\n        {'6',\"mno\"},{'7',\"pqrs\"},{'8',\"tuv\"},{'9',\"wxyz\"}\n    };\n    vector<string> res;\n    string curr;\n    function<void(int)> bt = [&](int i) {\n        if (i == (int)digits.size()) { res.push_back(curr); return; }\n        for (char ch : phone[digits[i]]) {\n            curr += ch; bt(i + 1); curr.pop_back();\n        }\n    };\n    bt(0);\n    return res;\n}",
     },
 
     testCases: [
@@ -1782,13 +1952,126 @@ export const QUESTIONS = {
         input: ["23"],
         expected: ["ad", "ae", "af", "bd", "be", "bf", "cd", "ce", "cf"]
       },
+      // empty digits → empty result
       {
         input: [""],
         expected: []
       },
+      // single digit
       {
         input: ["2"],
         expected: ["a", "b", "c"]
+      },
+      // digit 7 maps to 4 letters (pqrs)
+      {
+        input: ["7"],
+        expected: ["p", "q", "r", "s"]
+      },
+      // digit 9 maps to 4 letters (wxyz)
+      {
+        input: ["9"],
+        expected: ["w", "x", "y", "z"]
+      },
+    ],
+  },
+  41: {
+    id: 41,
+    title: "First Missing Positive",
+    difficulty: "Hard",
+    topic: "Arrays",
+
+    description:
+      "Given an unsorted integer array `nums`, return the smallest missing positive integer.\n\nYou must implement an algorithm that runs in **O(n)** time and uses **constant extra space**.",
+
+    examples: [
+      {
+        input: "nums = [1,2,0]",
+        output: "3",
+      },
+      {
+        input: "nums = [3,4,-1,1]",
+        output: "2",
+      },
+      {
+        input: "nums = [7,8,9,11,12]",
+        output: "1",
+      },
+    ],
+
+    constraints: [
+      "1 <= nums.length <= 10^5",
+      "-2^31 <= nums[i] <= 2^31 - 1",
+    ],
+
+    starterCode: {
+      javascript:
+        "/**\n * @param {number[]} nums\n * @return {number}\n */\nvar firstMissingPositive = function(nums) {\n    // Write your solution here\n};",
+
+      python:
+        "class Solution:\n    def firstMissingPositive(self, nums: List[int]) -> int:\n        # Write your solution here\n        pass",
+
+      cpp:
+        "#include <vector>\nusing namespace std;\n\nclass Solution {\npublic:\n    int firstMissingPositive(vector<int>& nums) {\n        // Write your solution here\n    }\n};",
+    },
+
+    solution: {
+      javascript:
+        "var firstMissingPositive = function(nums) {\n    const n = nums.length;\n\n    for (let i = 0; i < n; i++) {\n        while (\n            nums[i] > 0 &&\n            nums[i] <= n &&\n            nums[nums[i] - 1] !== nums[i]\n        ) {\n            let temp = nums[i];\n            nums[i] = nums[temp - 1];\n            nums[temp - 1] = temp;\n        }\n    }\n\n    for (let i = 0; i < n; i++) {\n        if (nums[i] !== i + 1) {\n            return i + 1;\n        }\n    }\n\n    return n + 1;\n};",
+
+      python:
+        "class Solution:\n    def firstMissingPositive(self, nums):\n        n = len(nums)\n\n        for i in range(n):\n            while 1 <= nums[i] <= n and nums[nums[i] - 1] != nums[i]:\n                correct = nums[i] - 1\n                nums[i], nums[correct] = nums[correct], nums[i]\n\n        for i in range(n):\n            if nums[i] != i + 1:\n                return i + 1\n\n        return n + 1",
+
+      cpp:
+        "int firstMissingPositive(vector<int>& nums) {\n    int n = nums.size();\n\n    for (int i = 0; i < n; i++) {\n        while (\n            nums[i] > 0 &&\n            nums[i] <= n &&\n            nums[nums[i] - 1] != nums[i]\n        ) {\n            swap(nums[i], nums[nums[i] - 1]);\n        }\n    }\n\n    for (int i = 0; i < n; i++) {\n        if (nums[i] != i + 1) {\n            return i + 1;\n        }\n    }\n\n    return n + 1;\n}",
+    },
+
+    testCases: [
+      {
+        input: [[1, 2, 0]],
+        expected: 3
+      },
+      {
+        input: [[3, 4, -1, 1]],
+        expected: 2
+      },
+      {
+        input: [[7, 8, 9, 11, 12]],
+        expected: 1
+      },
+      // array already contains 1..n
+      {
+        input: [[1, 2, 3]],
+        expected: 4
+      },
+      // duplicates
+      {
+        input: [[1, 1]],
+        expected: 2
+      },
+      // single element
+      {
+        input: [[2]],
+        expected: 1
+      },
+      // negatives only
+      {
+        input: [[-1, -2, -3]],
+        expected: 1
+      },
+      // mixed values
+      {
+        input: [[2, 3, 7, 6, 8, -1, -10, 15]],
+        expected: 1
+      },
+      // missing in middle
+      {
+        input: [[1, 2, 4, 5]],
+        expected: 3
+      },
+      // empty-like positive gap
+      {
+        input: [[0]],
+        expected: 1
       },
     ],
   },

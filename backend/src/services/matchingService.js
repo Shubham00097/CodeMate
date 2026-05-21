@@ -4,57 +4,84 @@ import { QUESTIONS } from "../utils/seedProblems.js";
 // In-memory queue: Array of { socketId, userId, criteria, timerId }
 let queue = [];
 
-const createMatch = async (io, entry1, entry2) => {
+const TOPICS = [
+  "Arrays",
+  "Strings",
+  "Linked Lists",
+  "Trees",
+  "Graphs",
+  "Dynamic Programming",
+  "Backtracking",
+  "Bit Manipulation",
+  "Sliding Window",
+  "Binary Search",
+  "Heap / Priority Queue",
+];
+
+// Helper to normalize topics (e.g. "Array" -> "Arrays", case insensitivity)
+function normalizeTopic(topic) {
+  if (!topic) return "";
+  const t = topic.toLowerCase().trim();
+  
+  if (t === "array" || t === "arrays") return "Arrays";
+  if (t === "string" || t === "strings") return "Strings";
+  if (t === "linked list" || t === "linked lists") return "Linked Lists";
+  if (t === "tree" || t === "trees") return "Trees";
+  if (t === "graph" || t === "graphs") return "Graphs";
+  if (t === "dynamic programming" || t === "dp") return "Dynamic Programming";
+  if (t === "backtracking") return "Backtracking";
+  if (t === "bit manipulation") return "Bit Manipulation";
+  if (t === "sliding window") return "Sliding Window";
+  if (t === "binary search") return "Binary Search";
+  if (t === "heap" || t === "priority queue" || t === "heap / priority queue") return "Heap / Priority Queue";
+
+  const found = TOPICS.find((top) => top.toLowerCase() === t);
+  return found || topic;
+}
+
+// ─── Pick the best matching problem ──────────────────────────────────────────
+// STRICTLY match normalized topic and difficulty. No fallbacks to other topics/difficulties.
+function pickProblem(difficulty, topic) {
+  const allQuestions = Object.values(QUESTIONS);
+  if (allQuestions.length === 0) {
+    return null;
+  }
+
+  const diff = (difficulty || "").toLowerCase().trim();
+  const top = normalizeTopic(topic).toLowerCase().trim();
+
+  // Find exact match only
+  const exactMatches = allQuestions.filter(
+    (q) =>
+      q.difficulty.toLowerCase().trim() === diff &&
+      normalizeTopic(q.topic).toLowerCase().trim() === top
+  );
+
+  if (exactMatches.length > 0) {
+    return exactMatches[Math.floor(Math.random() * exactMatches.length)];
+  }
+
+  return null;
+}
+
+// ─── Create session and notify both users ────────────────────────────────────
+const createMatch = async (io, entry1, entry2, matchedProblem) => {
   try {
-    const isExactMatch =
-      entry1.criteria.difficulty === entry2.criteria.difficulty &&
-      entry1.criteria.topic === entry2.criteria.topic;
-
-    let matchedProblem = null;
-    const allQuestions = Object.values(QUESTIONS);
-
-    if (allQuestions.length === 0) {
-      throw new Error("Missing problems: seedProblems.js contains no questions.");
-    }
-
-    if (isExactMatch) {
-      // 1. Try exact match (case-insensitive)
-      matchedProblem = allQuestions.find(
-        (q) =>
-          q.difficulty.toLowerCase() === entry1.criteria.difficulty.toLowerCase() &&
-          q.topic.toLowerCase() === entry1.criteria.topic.toLowerCase()
-      );
-    }
-
-    if (!matchedProblem) {
-      // 2. Try matching difficulty only
-      const diffQuestions = allQuestions.filter(
-        (q) => q.difficulty.toLowerCase() === entry1.criteria.difficulty.toLowerCase()
-      );
-      if (diffQuestions.length > 0) {
-        matchedProblem = diffQuestions[Math.floor(Math.random() * diffQuestions.length)];
-      }
-    }
-
-    if (!matchedProblem) {
-      // 3. Random problem fallback
-      matchedProblem = allQuestions[Math.floor(Math.random() * allQuestions.length)];
-    }
-
-    // Create a new Session in MongoDB using the integer id of the static question
     const session = new Session({
-      users: [entry1.userId, entry2.userId],
-      difficulty: matchedProblem.difficulty || entry1.criteria.difficulty,
-      topic: matchedProblem.topic || entry1.criteria.topic,
-      problem: matchedProblem.id,
-      status: "active",
+      users:      [entry1.userId, entry2.userId],
+      difficulty: matchedProblem.difficulty,
+      topic:      matchedProblem.topic,
+      problem:    matchedProblem.id,
+      status:     "active",
     });
 
     await session.save();
 
-    console.log(`Match found! Session ${session._id} created with problem "${matchedProblem.title}"`);
+    console.log(
+      `Match found! Session ${session._id} — ` +
+      `"${matchedProblem.title}" (${matchedProblem.difficulty} · ${matchedProblem.topic})`
+    );
 
-    // Notify both users
     io.to(entry1.socketId).emit("match_found", { sessionId: session._id, problemId: matchedProblem.id });
     io.to(entry2.socketId).emit("match_found", { sessionId: session._id, problemId: matchedProblem.id });
   } catch (err) {
@@ -66,74 +93,69 @@ const createMatch = async (io, entry1, entry2) => {
 
 const matchingService = {
   handleFindMatch: async (io, socket, criteria) => {
-    // 1. Check if user is already in queue (by socket OR user id) and remove old entry to prevent duplicates
+    // 1. Remove any stale entry for this user to prevent duplicates
     matchingService.removeFromQueue(socket.id, socket.userId);
 
-    const { difficulty, topic } = criteria;
+    const normDifficulty = (criteria.difficulty || "").toLowerCase().trim();
+    const normTopic = normalizeTopic(criteria.topic);
 
-    // 2. Find a compatible partner
-    const partnerIndex = queue.findIndex(
+    // 2. Find a partner who selected the EXACT same difficulty and normalized topic
+    const exactPartnerIndex = queue.findIndex(
       (entry) =>
-        entry.criteria.difficulty === difficulty &&
-        entry.criteria.topic === topic &&
+        (entry.criteria.difficulty || "").toLowerCase().trim() === normDifficulty &&
+        normalizeTopic(entry.criteria.topic) === normTopic &&
         entry.userId !== socket.userId
     );
 
-    if (partnerIndex !== -1) {
-      // 3. Match found immediately!
-      const partner = queue[partnerIndex];
-      if (partner.timerId) clearTimeout(partner.timerId);
+    const matchedProblem = pickProblem(normDifficulty, normTopic);
 
-      // Remove partner from queue
-      queue.splice(partnerIndex, 1);
+    if (exactPartnerIndex !== -1 && matchedProblem) {
+      // 3. Exact partner AND matching question exists in database -> match immediately!
+      const partner = queue[exactPartnerIndex];
+      if (partner.timerId) clearTimeout(partner.timerId);
+      queue.splice(exactPartnerIndex, 1);
 
       const userEntry = { socketId: socket.id, userId: socket.userId, criteria };
-      await createMatch(io, userEntry, partner);
-    } else {
-      // 4. No exact match found immediately, add to queue
-      console.log(`Adding ${socket.userId} to queue for ${difficulty} - ${topic}`);
-
-      const newEntry = {
-        socketId: socket.id,
-        userId: socket.userId,
-        criteria,
-        timerId: null,
-      };
-
-      // 5. Timeout for random match (25 seconds)
-      newEntry.timerId = setTimeout(() => {
-        // Check if this user is still in the queue
-        const myIndex = queue.findIndex((e) => e.userId === socket.userId);
-        if (myIndex === -1) return;
-
-        // Find ANY other user in the queue
-        const otherIndex = queue.findIndex((e) => e.userId !== socket.userId);
-        if (otherIndex !== -1) {
-          const me = queue[myIndex];
-          const other = queue[otherIndex];
-
-          console.log(`Timeout reached for ${me.userId}. Matching randomly with ${other.userId}`);
-
-          if (other.timerId) clearTimeout(other.timerId);
-
-          // Remove both from queue
-          queue = queue.filter((e) => e.userId !== me.userId && e.userId !== other.userId);
-
-          createMatch(io, me, other);
-        }
-        // If no one else is in queue, they just keep waiting
-      }, 25000);
-
-      queue.push(newEntry);
+      await createMatch(io, userEntry, partner, matchedProblem);
+      return;
     }
+
+    // 4. No partner found OR no matching question exists in database -> add to queue
+    // Show a loading/searching state to the user and wait for up to 15 seconds.
+    console.log(`Queuing ${socket.userId} for ${normDifficulty} · ${normTopic} (exact match required)`);
+
+    const newEntry = {
+      socketId: socket.id,
+      userId:   socket.userId,
+      criteria,
+      timerId:  null,
+    };
+
+    newEntry.timerId = setTimeout(() => {
+      const myIndex = queue.findIndex((e) => e.userId === socket.userId);
+      if (myIndex === -1) return; // Already matched or cancelled
+
+      console.log(`Match timeout reached for ${socket.userId} after 15 seconds.`);
+      
+      // Remove from queue
+      queue.splice(myIndex, 1);
+
+      // Notify the user that no exact matching question/partner was found
+      socket.emit("match_error", {
+        message: `No exact matching question was found for topic: ${criteria.topic}, difficulty: ${criteria.difficulty}. Please try again or select another configuration.`,
+      });
+    }, 15000); // Wait for exactly 15 seconds
+
+    queue.push(newEntry);
   },
 
   removeFromQueue: (socketId, userId = null) => {
     queue = queue.filter((entry) => {
-      const isMatch = entry.socketId === socketId || (userId && entry.userId === userId);
+      const isMatch =
+        entry.socketId === socketId || (userId && entry.userId === userId);
       if (isMatch) {
         if (entry.timerId) clearTimeout(entry.timerId);
-        console.log(`Removing ${entry.userId} from matching queue`);
+        console.log(`Removed ${entry.userId} from matching queue`);
       }
       return !isMatch;
     });
