@@ -9,10 +9,12 @@ import { clearAuthData, getToken } from "@/lib/auth";
 import { authApi, sessionApi } from "@/lib/api";
 import VideoCallPanel from "@/components/VideoCallPanel";
 import * as Y from "yjs";
+import { toast } from "react-hot-toast";
 
 export default function SessionPage() {
   const { id: sessionId } = useParams();
   const router = useRouter();
+  const isSolo = sessionId.startsWith("solo-");
 
   // ── Core state ─────────────────────────────────────────────────────────────
   const [user, setUser] = useState(null);
@@ -54,12 +56,22 @@ export default function SessionPage() {
   const [callState, setCallState] = useState("idle"); // idle | incoming | connected
   const [peerOnline, setPeerOnline] = useState(true);
 
+  // ── Exit Modal ─────────────────────────────────────────────────────────────
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
+
   // ── Socket ref (passed down to VideoCallPanel) ─────────────────────────────
   const socketRef = useRef(null);
 
   // ── Derived ────────────────────────────────────────────────────────────────
   const peerUser = sessionData?.users?.find(u => u._id !== user?._id);
   const problem = sessionData?.problem || {};
+  const peerNameRef = useRef("Partner");
+
+  useEffect(() => {
+    if (peerUser) {
+      peerNameRef.current = peerUser.name;
+    }
+  }, [peerUser]);
 
   // ═══ Load user + session ══════════════════════════════════════════════════
   useEffect(() => {
@@ -177,6 +189,7 @@ export default function SessionPage() {
       setPeerOnline(status === "online");
       if (status === "offline") {
         setCallState("idle");
+        toast(`${peerNameRef.current} left the session`, { style: { background: "#1C1D21", color: "#fff", border: "1px solid rgba(255,255,255,0.1)" } });
       }
     });
 
@@ -385,6 +398,42 @@ export default function SessionPage() {
       fontFamily: "var(--font-geist-sans),-apple-system,sans-serif", overflow: "hidden"
     }}>
 
+      {/* ── Exit Confirmation Modal ── */}
+      {showExitConfirm && (
+        <div style={{
+          position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh",
+          background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)",
+          display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999
+        }}>
+          <div style={{
+            background: "#111214", border: "1px solid rgba(255,255,255,0.1)",
+            borderRadius: "12px", padding: "24px", width: "320px",
+            boxShadow: "0 10px 30px rgba(0,0,0,0.5)"
+          }}>
+            <h3 style={{ margin: "0 0 12px 0", fontSize: "16px", fontWeight: 600 }}>Exit Session?</h3>
+            <p style={{ margin: "0 0 24px 0", fontSize: "14px", color: "#A1A1AA" }}>
+              Do you want to exit the current session?
+            </p>
+            <div style={{ display: "flex", gap: "12px" }}>
+              <button onClick={() => setShowExitConfirm(false)} style={{
+                flex: 1, padding: "8px 0", borderRadius: "6px",
+                background: "transparent", border: "1px solid rgba(255,255,255,0.1)",
+                color: "#fff", fontSize: "14px", fontWeight: 500, cursor: "pointer"
+              }}>
+                Cancel
+              </button>
+              <button onClick={() => router.push("/dashboard")} style={{
+                flex: 1, padding: "8px 0", borderRadius: "6px",
+                background: "#EF4444", border: "none",
+                color: "#fff", fontSize: "14px", fontWeight: 600, cursor: "pointer"
+              }}>
+                Yes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Top Header ── */}
       <header style={{
         height: "56px", borderBottom: "1px solid rgba(255,255,255,0.08)",
@@ -393,15 +442,16 @@ export default function SessionPage() {
       }}>
 
         <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-          <Link href="/dashboard" style={{
+          <button onClick={() => setShowExitConfirm(true)} style={{
             display: "flex", alignItems: "center", gap: "6px",
-            textDecoration: "none", color: "#88888F", fontSize: "13px"
+            background: "transparent", border: "none", cursor: "pointer",
+            color: "#EF4444", fontSize: "13px", fontWeight: "600"
           }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" />
             </svg>
-            Dashboard
-          </Link>
+            Exit
+          </button>
           <span style={{ height: "16px", width: "1px", background: "rgba(255,255,255,0.12)" }} />
           <span style={{ fontSize: "14px", fontWeight: "600", letterSpacing: "-0.01em" }}>
             codeMate Workspace
@@ -413,12 +463,12 @@ export default function SessionPage() {
             <span style={{
               fontSize: "11px", fontWeight: "600", textTransform: "uppercase",
               letterSpacing: "0.05em", padding: "4px 8px", borderRadius: "4px",
-              background: problem.difficulty === "easy" ? "rgba(16,185,129,0.15)"
-                : problem.difficulty === "medium" ? "rgba(245,158,11,0.15)" : "rgba(239,68,68,0.15)",
-              color: problem.difficulty === "easy" ? "#10B981"
-                : problem.difficulty === "medium" ? "#F59E0B" : "#EF4444",
-              border: `1px solid ${problem.difficulty === "easy" ? "rgba(16,185,129,0.2)"
-                : problem.difficulty === "medium" ? "rgba(245,158,11,0.2)" : "rgba(239,68,68,0.2)"}`,
+              background: problem.difficulty.toLowerCase() === "easy" ? "rgba(34,197,94,0.15)"
+                : problem.difficulty.toLowerCase() === "medium" ? "rgba(202,138,4,0.15)" : "rgba(239,68,68,0.15)",
+              color: problem.difficulty.toLowerCase() === "easy" ? "#22c55e"
+                : problem.difficulty.toLowerCase() === "medium" ? "#ca8a04" : "#ef4444",
+              border: `1px solid ${problem.difficulty.toLowerCase() === "easy" ? "rgba(34,197,94,0.2)"
+                : problem.difficulty.toLowerCase() === "medium" ? "rgba(202,138,4,0.2)" : "rgba(239,68,68,0.2)"}`,
             }}>{problem.difficulty}</span>
           )}
           {problem.topic && (
@@ -434,50 +484,54 @@ export default function SessionPage() {
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          {callState !== "connected" ? (
-            <button onClick={startCall} disabled={!peerOnline} style={{
-              display: "flex", alignItems: "center", gap: "6px", padding: "6px 12px",
-              background: peerOnline ? "rgba(16,185,129,0.15)" : "rgba(255,255,255,0.04)",
-              border: `1px solid ${peerOnline ? "rgba(16,185,129,0.3)" : "rgba(255,255,255,0.06)"}`,
-              borderRadius: "6px", color: peerOnline ? "#10B981" : "#A1A1AA",
-              fontSize: "12px", fontWeight: "500", cursor: peerOnline ? "pointer" : "not-allowed", outline: "none"
-            }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
-              </svg>
-              Start Call
-            </button>
-          ) : (
-            <button onClick={endCall} style={{
-              display: "flex", alignItems: "center", gap: "6px", padding: "6px 12px",
-              background: "rgba(239,68,68,0.15)",
-              border: "1px solid rgba(239,68,68,0.3)",
-              borderRadius: "6px", color: "#EF4444",
-              fontSize: "12px", fontWeight: "500", cursor: "pointer", outline: "none"
-            }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M6.62 10.79a15.05 15.05 0 0 0 6.59 6.59l2.2-2.2a1 1 0 0 1 1.01-.24c1.12.37 2.33.57 3.58.57a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1C10.61 21 3 13.39 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.46.57 3.58a1 1 0 0 1-.24 1.01l-2.21 2.2z" />
-              </svg>
-              End Call
-            </button>
-          )}
+          {!isSolo && (
+            <>
+              {callState !== "connected" ? (
+                <button onClick={startCall} disabled={!peerOnline} style={{
+                  display: "flex", alignItems: "center", gap: "6px", padding: "6px 12px",
+                  background: peerOnline ? "rgba(16,185,129,0.15)" : "rgba(255,255,255,0.04)",
+                  border: `1px solid ${peerOnline ? "rgba(16,185,129,0.3)" : "rgba(255,255,255,0.06)"}`,
+                  borderRadius: "6px", color: peerOnline ? "#10B981" : "#A1A1AA",
+                  fontSize: "12px", fontWeight: "500", cursor: peerOnline ? "pointer" : "not-allowed", outline: "none"
+                }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+                  </svg>
+                  Start Call
+                </button>
+              ) : (
+                <button onClick={endCall} style={{
+                  display: "flex", alignItems: "center", gap: "6px", padding: "6px 12px",
+                  background: "rgba(239,68,68,0.15)",
+                  border: "1px solid rgba(239,68,68,0.3)",
+                  borderRadius: "6px", color: "#EF4444",
+                  fontSize: "12px", fontWeight: "500", cursor: "pointer", outline: "none"
+                }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M6.62 10.79a15.05 15.05 0 0 0 6.59 6.59l2.2-2.2a1 1 0 0 1 1.01-.24c1.12.37 2.33.57 3.58.57a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1C10.61 21 3 13.39 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.46.57 3.58a1 1 0 0 1-.24 1.01l-2.21 2.2z" />
+                  </svg>
+                  End Call
+                </button>
+              )}
 
-          <div style={{
-            display: "flex", alignItems: "center", gap: "8px", padding: "6px 12px",
-            background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)",
-            borderRadius: "6px"
-          }}>
-            <span style={{
-              width: "8px", height: "8px", borderRadius: "50%",
-              background: peerOnline ? "#10B981" : "#88888F"
-            }} />
-            <span style={{ fontSize: "12px", fontWeight: "500", color: "#E4E4E7" }}>
-              Partner: {peerUser?.name || "…"}
-            </span>
-            <span style={{ fontSize: "11px", color: "#88888F" }}>
-              ({peerOnline ? "Online" : "Offline"})
-            </span>
-          </div>
+              <div style={{
+                display: "flex", alignItems: "center", gap: "8px", padding: "6px 12px",
+                background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)",
+                borderRadius: "6px"
+              }}>
+                <span style={{
+                  width: "8px", height: "8px", borderRadius: "50%",
+                  background: peerOnline ? "#10B981" : "#88888F"
+                }} />
+                <span style={{ fontSize: "12px", fontWeight: "500", color: "#E4E4E7" }}>
+                  Partner: {peerUser?.name || "…"}
+                </span>
+                <span style={{ fontSize: "11px", color: "#88888F" }}>
+                  ({peerOnline ? "Online" : "Offline"})
+                </span>
+              </div>
+            </>
+          )}
         </div>
       </header>
 
@@ -580,7 +634,7 @@ export default function SessionPage() {
             {/* Monaco */}
             <div style={{ flex: 1, position: "relative", minHeight: 0 }}>
               <Editor height="100%" language={selectedLanguage} theme="vs-dark"
-                value={code} onChange={handleEditorChange} onMount={handleEditorDidMount}
+                onMount={handleEditorDidMount}
                 options={{
                   minimap: { enabled: false }, fontSize: 14, lineNumbers: "on",
                   scrollBeyondLastLine: false, automaticLayout: true,
@@ -885,7 +939,7 @@ export default function SessionPage() {
         </div>
 
         {/* Video Call Panel */}
-        {callState === "connected" && user && peerUser && (
+        {!isSolo && callState === "connected" && user && peerUser && (
           <VideoCallPanel
             sessionId={sessionId}
             user={user}
@@ -897,7 +951,7 @@ export default function SessionPage() {
       </div>
 
       {/* Incoming Call Modal */}
-      {callState === "incoming" && (
+      {!isSolo && callState === "incoming" && (
         <div style={{
           position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)",
           backdropFilter: "blur(4px)", display: "flex", alignItems: "center",

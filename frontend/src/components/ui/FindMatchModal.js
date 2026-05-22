@@ -17,11 +17,6 @@ const TOPICS = [
   "Sliding Window", "Binary Search", "Heap / Priority Queue",
 ];
 
-const RECENT = [
-  { difficulty: "medium", topic: "Graphs" },
-  { difficulty: "easy",   topic: "Arrays" },
-];
-
 export default function FindMatchModal({ isOpen, onClose }) {
   const router = useRouter();
   const [difficulty, setDifficulty] = useState("medium");
@@ -30,6 +25,9 @@ export default function FindMatchModal({ isOpen, onClose }) {
   const [voiceChat,  setVoiceChat]  = useState(false);
   const [matching,   setMatching]   = useState(false);
   const [errorMsg,   setErrorMsg]   = useState("");
+  const [friendCode, setFriendCode] = useState("");
+  const [isJoining,  setIsJoining]  = useState(false);
+  const [generatedCode, setGeneratedCode] = useState(null);
   const socketRef = useRef(null);
 
   const handleKeyDown = useCallback(
@@ -61,6 +59,7 @@ export default function FindMatchModal({ isOpen, onClose }) {
   const handleStartMatching = () => {
     setMatching(true);
     setErrorMsg("");
+    setGeneratedCode(null);
     
     const socket = initSocket();
     if (!socket) {
@@ -70,12 +69,30 @@ export default function FindMatchModal({ isOpen, onClose }) {
     }
     socketRef.current = socket;
 
-    socket.emit("find_match", { difficulty, topic });
+    if (matchType === "friend") {
+      if (isJoining) {
+        if (friendCode.trim().length !== 6) {
+           setErrorMsg("Please enter a valid 6-character code.");
+           setMatching(false);
+           return;
+        }
+        socket.emit("join_friend_match", { code: friendCode.trim() });
+      } else {
+        socket.emit("create_friend_match", { difficulty, topic });
+      }
+    } else {
+      socket.emit("find_match", { difficulty, topic });
+    }
+
+    socket.on("friend_match_created", (data) => {
+      setGeneratedCode(data.code);
+    });
 
     socket.on("match_found", (data) => {
       console.log("Match found!", data);
       socket.off("match_found");
       socket.off("match_error");
+      socket.off("friend_match_created");
       router.push(`/session/${data.sessionId}`);
       onClose(); // close modal
     });
@@ -86,6 +103,7 @@ export default function FindMatchModal({ isOpen, onClose }) {
       setMatching(false);
       socket.off("match_found");
       socket.off("match_error");
+      socket.off("friend_match_created");
     });
   };
 
@@ -94,8 +112,10 @@ export default function FindMatchModal({ isOpen, onClose }) {
       socketRef.current.emit("cancel_match");
       socketRef.current.off("match_found");
       socketRef.current.off("match_error");
+      socketRef.current.off("friend_match_created");
     }
     setMatching(false);
+    setGeneratedCode(null);
   };
 
   return (
@@ -157,118 +177,6 @@ export default function FindMatchModal({ isOpen, onClose }) {
         {/* ── Body ───────────────────────────────────────────── */}
         <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: "20px" }}>
 
-          {/* Recent sessions */}
-          {RECENT.length > 0 && (
-            <div>
-              <p className="cm-section-label" style={{ marginBottom: "8px" }}>
-                Recent
-              </p>
-              <div style={{ display: "flex", gap: "6px" }}>
-                {RECENT.map((r, i) => (
-                  <button
-                    key={i}
-                    onClick={() => { setDifficulty(r.difficulty); setTopic(r.topic); }}
-                    className="cm-badge cm-badge-active"
-                    style={{
-                      cursor: "pointer",
-                      transition: "border-color var(--cm-t), color var(--cm-t)",
-                      border: "1px solid var(--cm-border-2)",
-                      padding: "4px 9px",
-                      fontSize: "0.69rem",
-                      borderRadius: "var(--cm-radius-xs)",
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--cm-border-4)")}
-                    onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--cm-border-2)")}
-                  >
-                    <Clock size={9} strokeWidth={2} />
-                    {r.topic} · {r.difficulty}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Difficulty — monochrome toggle */}
-          <div>
-            <label
-              style={{
-                display: "block",
-                fontSize: "0.72rem",
-                fontWeight: 600,
-                color: "var(--cm-text-2)",
-                letterSpacing: "0.06em",
-                textTransform: "uppercase",
-                marginBottom: "8px",
-              }}
-            >
-              Difficulty
-            </label>
-            <div
-              style={{
-                display: "flex",
-                background: "var(--cm-surface-2)",
-                border: "1px solid var(--cm-border)",
-                borderRadius: "var(--cm-radius-sm)",
-                padding: "3px",
-                gap: "3px",
-              }}
-            >
-              {DIFFICULTIES.map(({ id, label }) => {
-                const active = difficulty === id;
-                return (
-                  <button
-                    key={id}
-                    id={`difficulty-${id}`}
-                    onClick={() => setDifficulty(id)}
-                    style={{
-                      flex: 1,
-                      padding: "8px 0",
-                      borderRadius: "4px",
-                      background: active ? "var(--cm-text-1)" : "transparent",
-                      border: "none",
-                      color: active ? "#080909" : "var(--cm-text-3)",
-                      fontSize: "0.8rem",
-                      fontWeight: active ? 700 : 500,
-                      cursor: "pointer",
-                      transition: "all var(--cm-t)",
-                      letterSpacing: "-0.01em",
-                    }}
-                  >
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Topic */}
-          <div>
-            <label
-              htmlFor="topic-select"
-              style={{
-                display: "block",
-                fontSize: "0.72rem",
-                fontWeight: 600,
-                color: "var(--cm-text-2)",
-                letterSpacing: "0.06em",
-                textTransform: "uppercase",
-                marginBottom: "8px",
-              }}
-            >
-              Topic
-            </label>
-            <select
-              id="topic-select"
-              value={topic}
-              onChange={(e) => setTopic(e.target.value)}
-              className="cm-input cm-select"
-            >
-              {TOPICS.map((t) => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </select>
-          </div>
-
           {/* Match Type */}
           <div>
             <label
@@ -303,7 +211,10 @@ export default function FindMatchModal({ isOpen, onClose }) {
                   <button
                     key={id}
                     id={`match-type-${id}`}
-                    onClick={() => setMatchType(id)}
+                    onClick={() => {
+                      setMatchType(id);
+                      if (id === "random") setIsJoining(false);
+                    }}
                     style={{
                       flex: 1,
                       padding: "7px 12px",
@@ -324,6 +235,164 @@ export default function FindMatchModal({ isOpen, onClose }) {
               })}
             </div>
           </div>
+
+          {matchType === "friend" && (
+            <div style={{ display: "flex", gap: "8px", padding: "4px", background: "var(--cm-surface-2)", borderRadius: "var(--cm-radius-sm)", border: "1px solid var(--cm-border)" }}>
+              <button
+                onClick={() => setIsJoining(false)}
+                style={{
+                  flex: 1,
+                  padding: "6px 0",
+                  borderRadius: "4px",
+                  background: !isJoining ? "var(--cm-surface-4)" : "transparent",
+                  color: !isJoining ? "var(--cm-text-1)" : "var(--cm-text-3)",
+                  border: `1px solid ${!isJoining ? "var(--cm-border-3)" : "transparent"}`,
+                  fontSize: "0.75rem",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                Create Room
+              </button>
+              <button
+                onClick={() => setIsJoining(true)}
+                style={{
+                  flex: 1,
+                  padding: "6px 0",
+                  borderRadius: "4px",
+                  background: isJoining ? "var(--cm-surface-4)" : "transparent",
+                  color: isJoining ? "var(--cm-text-1)" : "var(--cm-text-3)",
+                  border: `1px solid ${isJoining ? "var(--cm-border-3)" : "transparent"}`,
+                  fontSize: "0.75rem",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                Join Room
+              </button>
+            </div>
+          )}
+
+          {(!isJoining || matchType === "random") ? (
+            <>
+              {/* Difficulty — monochrome toggle */}
+              <div>
+                <label
+                  style={{
+                    display: "block",
+                    fontSize: "0.72rem",
+                    fontWeight: 600,
+                    color: "var(--cm-text-2)",
+                    letterSpacing: "0.06em",
+                    textTransform: "uppercase",
+                    marginBottom: "8px",
+                  }}
+                >
+                  Difficulty
+                </label>
+                <div
+                  style={{
+                    display: "flex",
+                    background: "var(--cm-surface-2)",
+                    border: "1px solid var(--cm-border)",
+                    borderRadius: "var(--cm-radius-sm)",
+                    padding: "3px",
+                    gap: "3px",
+                  }}
+                >
+                  {DIFFICULTIES.map(({ id, label }) => {
+                    const active = difficulty === id;
+                    return (
+                      <button
+                        key={id}
+                        id={`difficulty-${id}`}
+                        onClick={() => setDifficulty(id)}
+                        style={{
+                          flex: 1,
+                          padding: "8px 0",
+                          borderRadius: "4px",
+                          background: active ? "var(--cm-text-1)" : "transparent",
+                          border: "none",
+                          color: active ? "#080909" : "var(--cm-text-3)",
+                          fontSize: "0.8rem",
+                          fontWeight: active ? 700 : 500,
+                          cursor: "pointer",
+                          transition: "all var(--cm-t)",
+                          letterSpacing: "-0.01em",
+                        }}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Topic */}
+              <div>
+                <label
+                  htmlFor="topic-select"
+                  style={{
+                    display: "block",
+                    fontSize: "0.72rem",
+                    fontWeight: 600,
+                    color: "var(--cm-text-2)",
+                    letterSpacing: "0.06em",
+                    textTransform: "uppercase",
+                    marginBottom: "8px",
+                  }}
+                >
+                  Topic
+                </label>
+                <select
+                  id="topic-select"
+                  value={topic}
+                  onChange={(e) => setTopic(e.target.value)}
+                  className="cm-input cm-select"
+                >
+                  {TOPICS.map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+              </div>
+            </>
+          ) : (
+            <div>
+              <label
+                style={{
+                  display: "block",
+                  fontSize: "0.72rem",
+                  fontWeight: 600,
+                  color: "var(--cm-text-2)",
+                  letterSpacing: "0.06em",
+                  textTransform: "uppercase",
+                  marginBottom: "8px",
+                }}
+              >
+                Friend Code
+              </label>
+              <input
+                type="text"
+                value={friendCode}
+                onChange={(e) => setFriendCode(e.target.value.toUpperCase())}
+                placeholder="Enter 6-character code"
+                maxLength={6}
+                style={{
+                  width: "100%",
+                  padding: "10px 14px",
+                  fontSize: "1.2rem",
+                  letterSpacing: "0.3em",
+                  fontWeight: 600,
+                  textAlign: "center",
+                  background: "var(--cm-surface-2)",
+                  border: "1px solid var(--cm-border)",
+                  borderRadius: "var(--cm-radius-sm)",
+                  color: "var(--cm-text-1)",
+                  outline: "none",
+                }}
+              />
+            </div>
+          )}
 
           {/* Voice Chat toggle */}
           <div
@@ -391,6 +460,12 @@ export default function FindMatchModal({ isOpen, onClose }) {
               {errorMsg}
             </div>
           )}
+          {generatedCode && (
+            <div style={{ textAlign: "center", padding: "10px", background: "var(--cm-surface-2)", border: "1px dashed var(--cm-border-3)", borderRadius: "var(--cm-radius-sm)", marginBottom: "8px" }}>
+              <p style={{ fontSize: "0.75rem", color: "var(--cm-text-2)", marginBottom: "4px" }}>Share this code with your friend:</p>
+              <p style={{ fontSize: "1.2rem", fontWeight: 700, letterSpacing: "0.2em", color: "var(--cm-text-1)" }}>{generatedCode}</p>
+            </div>
+          )}
           <div style={{ display: "flex", gap: "8px" }}>
             <button
               onClick={() => {
@@ -405,6 +480,7 @@ export default function FindMatchModal({ isOpen, onClose }) {
             <button
               id="start-matching-btn"
               onClick={matching ? handleCancelMatching : handleStartMatching}
+              disabled={matching && (matchType === "random" || generatedCode)}
               className="cm-btn cm-btn-primary"
               style={{
                 flex: 2,
@@ -412,6 +488,8 @@ export default function FindMatchModal({ isOpen, onClose }) {
                 padding: "10px 16px",
                 fontSize: "0.88rem",
                 fontWeight: 700,
+                opacity: matching && (matchType === "random" || generatedCode) ? 0.7 : 1,
+                cursor: matching && (matchType === "random" || generatedCode) ? "not-allowed" : "pointer"
               }}
             >
               {matching ? (
@@ -425,12 +503,12 @@ export default function FindMatchModal({ isOpen, onClose }) {
                   >
                     <path d="M21 12a9 9 0 1 1-6.219-8.56" />
                   </svg>
-                  Searching…
+                  {generatedCode ? "Waiting for friend…" : (isJoining ? "Joining…" : "Searching…")}
                 </>
               ) : (
                 <>
                   <Swords size={14} strokeWidth={2.2} />
-                  Start Matching
+                  {matchType === "friend" ? (isJoining ? "Join Room" : "Generate Code") : "Start Matching"}
                 </>
               )}
             </button>

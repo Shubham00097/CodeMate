@@ -37,6 +37,14 @@ export default function setupSocket(server) {
       matchingService.removeFromQueue(socket.id);
     });
 
+    socket.on("create_friend_match", async (criteria) => {
+      await matchingService.handleCreateFriendMatch(io, socket, criteria);
+    });
+
+    socket.on("join_friend_match", async ({ code }) => {
+      await matchingService.handleJoinFriendMatch(io, socket, code);
+    });
+
     // Real-Time Collaborative Session Rooms
     socket.on("join_session", (sessionId) => {
       socket.join(sessionId);

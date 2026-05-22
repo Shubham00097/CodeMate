@@ -4,6 +4,18 @@ import { QUESTIONS } from "../utils/seedProblems.js";
 // In-memory queue: Array of { socketId, userId, criteria, timerId }
 let queue = [];
 
+// In-memory friend queue: Map of code -> { socketId, userId, criteria }
+const friendQueue = new Map();
+
+function generateAlphanumericCode() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let code = "";
+  for (let i = 0; i < 6; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return code;
+}
+
 const TOPICS = [
   "Arrays",
   "Strings",
@@ -159,6 +171,61 @@ const matchingService = {
       }
       return !isMatch;
     });
+
+    // Also remove from friend queue
+    for (const [code, creator] of friendQueue.entries()) {
+      if (creator.socketId === socketId || (userId && creator.userId === userId)) {
+        friendQueue.delete(code);
+        console.log(`Removed ${creator.userId} from friend queue (code ${code})`);
+      }
+    }
+  },
+
+  handleCreateFriendMatch: (io, socket, criteria) => {
+    // 1. Remove any stale entry
+    matchingService.removeFromQueue(socket.id, socket.userId);
+
+    const normDifficulty = (criteria.difficulty || "").toLowerCase().trim();
+    const normTopic = normalizeTopic(criteria.topic);
+
+    // Make sure a problem exists before giving a code
+    const matchedProblem = pickProblem(normDifficulty, normTopic);
+    if (!matchedProblem) {
+      socket.emit("match_error", {
+        message: `No matching question found for topic: ${criteria.topic}, difficulty: ${criteria.difficulty}.`,
+      });
+      return;
+    }
+
+    const code = generateAlphanumericCode();
+    friendQueue.set(code, {
+      socketId: socket.id,
+      userId: socket.userId,
+      criteria,
+      problem: matchedProblem
+    });
+
+    console.log(`Created friend match code ${code} for ${socket.userId}`);
+    socket.emit("friend_match_created", { code });
+  },
+
+  handleJoinFriendMatch: async (io, socket, code) => {
+    const creator = friendQueue.get(code.toUpperCase());
+    if (!creator) {
+      socket.emit("match_error", { message: "Invalid or expired code." });
+      return;
+    }
+
+    // Prevent joining own room directly (though logic would handle it, better to block)
+    if (creator.userId === socket.userId) {
+      socket.emit("match_error", { message: "Cannot join your own room from the same account." });
+      return;
+    }
+
+    friendQueue.delete(code.toUpperCase());
+
+    const userEntry = { socketId: socket.id, userId: socket.userId, criteria: creator.criteria };
+    await createMatch(io, creator, userEntry, creator.problem);
   },
 };
 

@@ -9,6 +9,24 @@ const router = express.Router();
 
 router.get("/:id", protect, async (req, res) => {
   try {
+    // Solo session support
+    if (req.params.id.startsWith("solo-")) {
+      const problemId = parseInt(req.params.id.replace("solo-", ""), 10);
+      const problemData = QUESTIONS[problemId];
+      
+      if (!problemData) {
+        return res.status(404).json({ message: "Problem not found" });
+      }
+      
+      const sessionData = {
+        _id: req.params.id,
+        users: [{ _id: req.user._id, name: req.user.name, email: req.user.email }],
+        problem: problemData,
+      };
+      
+      return res.status(200).json({ session: sessionData });
+    }
+
     const session = await Session.findById(req.params.id)
       .populate("users", "name email");
 
@@ -50,22 +68,32 @@ router.post("/:id/run", protect, async (req, res) => {
   }
 
   try {
-    const session = await Session.findById(req.params.id);
-    if (!session) {
-      return res.status(404).json({ message: "Session not found" });
-    }
+    let problem;
 
-    // Security: Check if user belongs to session
-    const isMember = session.users.some(
-      (userId) => userId.toString() === req.user._id.toString()
-    );
-    if (!isMember) {
-      return res.status(403).json({ message: "You are not authorized to run code in this session room." });
-    }
+    if (req.params.id.startsWith("solo-")) {
+      const problemId = parseInt(req.params.id.replace("solo-", ""), 10);
+      problem = QUESTIONS[problemId];
+      if (!problem) {
+        return res.status(404).json({ message: "No problem found" });
+      }
+    } else {
+      const session = await Session.findById(req.params.id);
+      if (!session) {
+        return res.status(404).json({ message: "Session not found" });
+      }
 
-    const problem = QUESTIONS[session.problem];
-    if (!problem) {
-      return res.status(404).json({ message: "No problem found associated with this session." });
+      // Security: Check if user belongs to session
+      const isMember = session.users.some(
+        (userId) => userId.toString() === req.user._id.toString()
+      );
+      if (!isMember) {
+        return res.status(403).json({ message: "You are not authorized to run code in this session room." });
+      }
+
+      problem = QUESTIONS[session.problem];
+      if (!problem) {
+        return res.status(404).json({ message: "No problem found associated with this session." });
+      }
     }
 
     const report = await codeExecutionService.execute(code, language, problem);
@@ -83,22 +111,32 @@ router.post("/:id/submit", protect, async (req, res) => {
   }
 
   try {
-    const session = await Session.findById(req.params.id);
-    if (!session) {
-      return res.status(404).json({ message: "Session not found" });
-    }
+    let problem;
 
-    // Security: Check if user belongs to session
-    const isMember = session.users.some(
-      (userId) => userId.toString() === req.user._id.toString()
-    );
-    if (!isMember) {
-      return res.status(403).json({ message: "You are not authorized to submit code in this session room." });
-    }
+    if (req.params.id.startsWith("solo-")) {
+      const problemId = parseInt(req.params.id.replace("solo-", ""), 10);
+      problem = QUESTIONS[problemId];
+      if (!problem) {
+        return res.status(404).json({ message: "No problem found" });
+      }
+    } else {
+      const session = await Session.findById(req.params.id);
+      if (!session) {
+        return res.status(404).json({ message: "Session not found" });
+      }
 
-    const problem = QUESTIONS[session.problem];
-    if (!problem) {
-      return res.status(404).json({ message: "No problem found associated with this session." });
+      // Security: Check if user belongs to session
+      const isMember = session.users.some(
+        (userId) => userId.toString() === req.user._id.toString()
+      );
+      if (!isMember) {
+        return res.status(403).json({ message: "You are not authorized to submit code in this session room." });
+      }
+
+      problem = QUESTIONS[session.problem];
+      if (!problem) {
+        return res.status(404).json({ message: "No problem found associated with this session." });
+      }
     }
 
     const report = await codeExecutionService.execute(code, language, problem);
@@ -116,22 +154,32 @@ router.post("/:id/hint", protect, async (req, res) => {
   }
 
   try {
-    const session = await Session.findById(req.params.id);
-    if (!session) {
-      return res.status(404).json({ message: "Session not found" });
-    }
+    let problem;
 
-    // Security: Check if user belongs to session
-    const isMember = session.users.some(
-      (userId) => userId.toString() === req.user._id.toString()
-    );
-    if (!isMember) {
-      return res.status(403).json({ message: "You are not authorized to request AI hints in this session room." });
-    }
+    if (req.params.id.startsWith("solo-")) {
+      const problemId = parseInt(req.params.id.replace("solo-", ""), 10);
+      problem = QUESTIONS[problemId];
+      if (!problem) {
+        return res.status(404).json({ message: "No problem found" });
+      }
+    } else {
+      const session = await Session.findById(req.params.id);
+      if (!session) {
+        return res.status(404).json({ message: "Session not found" });
+      }
 
-    const problem = QUESTIONS[session.problem];
-    if (!problem) {
-      return res.status(404).json({ message: "No problem found associated with this session." });
+      // Security: Check if user belongs to session
+      const isMember = session.users.some(
+        (userId) => userId.toString() === req.user._id.toString()
+      );
+      if (!isMember) {
+        return res.status(403).json({ message: "You are not authorized to request AI hints in this session room." });
+      }
+
+      problem = QUESTIONS[session.problem];
+      if (!problem) {
+        return res.status(404).json({ message: "No problem found associated with this session." });
+      }
     }
 
     const hint = await aiService.generateHint(problem, code, language);
